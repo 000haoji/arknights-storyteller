@@ -35,7 +35,7 @@ function App() {
   // If a story is selected, show the reader
   if (selectedStory) {
     return (
-      <ThemeProvider defaultTheme="dark" storageKey="arknights-story-theme">
+      <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
         <StoryReader
           storyPath={selectedStory.storyTxt}
           storyName={selectedStory.storyName}
@@ -46,7 +46,7 @@ function App() {
   }
 
   return (
-    <ThemeProvider defaultTheme="dark" storageKey="arknights-story-theme">
+    <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
       <div className="pb-16">
         {activeTab === "stories" && <StoryList onSelectStory={handleSelectStory} />}
         {activeTab === "search" && <SearchPanel onSelectResult={handleSearchResult} />}

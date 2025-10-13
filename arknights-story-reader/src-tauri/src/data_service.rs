@@ -1,16 +1,19 @@
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
-use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use reqwest::blocking::Client;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
-use reqwest::blocking::Client;
 use zip::ZipArchive;
-use crate::models::{StoryEntry, Chapter, Activity, StoryCategory, SearchResult};
-use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::models::{Activity, Chapter, SearchResult, StoryCategory, StoryEntry};
 
 const REPO_API_URL: &str = "https://api.github.com/repos/Kengxxiao/ArknightsGameData";
 const REPO_DOWNLOAD_URL: &str = "https://codeload.github.com/Kengxxiao/ArknightsGameData/zip";
+const DEFAULT_BRANCH: &str = "master";
 const VERSION_FILE: &str = "version.json";
 
 #[derive(Clone, serde::Serialize)]
@@ -79,16 +82,25 @@ impl DataService {
         let client = Self::create_http_client()?;
         let remote_commit = match self.fetch_latest_commit(&client) {
             Ok(commit) => {
-                emit_progress(&app, "准备", 1, 1, format!("最新版本 {}", &commit[..7]));
+                let short = commit.get(..7).unwrap_or(commit.as_str());
+                emit_progress(&app, "准备", 1, 1, format!("最新版本 {}", short));
                 Some(commit)
             }
             Err(err) => {
-                emit_progress(&app, "准备", 0, 1, format!("获取版本信息失败，用 main 作为备选: {}", err));
+                emit_progress(
+                    &app,
+                    "准备",
+                    0,
+                    1,
+                    format!("获取版本信息失败，回退到 {}: {}", DEFAULT_BRANCH, err),
+                );
                 None
             }
         };
 
-        let reference = remote_commit.clone().unwrap_or_else(|| "main".to_string());
+        let reference = remote_commit
+            .clone()
+            .unwrap_or_else(|| DEFAULT_BRANCH.to_string());
         self.download_and_extract(&client, &app, &reference)?;
 
         // 写入版本信息
@@ -152,7 +164,7 @@ impl DataService {
     }
 
     fn fetch_latest_commit(&self, client: &Client) -> Result<String, String> {
-        let url = format!("{}/commits/main", REPO_API_URL);
+        let url = format!("{}/commits/{}", REPO_API_URL, DEFAULT_BRANCH);
         let response = client
             .get(&url)
             .send()
@@ -534,4 +546,3 @@ impl DataService {
         }
     }
 }
-

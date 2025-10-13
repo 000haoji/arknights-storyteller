@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    arknights_story_reader_lib::run()
+    story_teller_lib::run()
 }
