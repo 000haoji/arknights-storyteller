@@ -30,7 +30,13 @@ struct VersionInfo {
     fetched_at: i64,
 }
 
-fn emit_progress(app: &AppHandle, phase: impl Into<String>, current: usize, total: usize, message: impl Into<String>) {
+fn emit_progress(
+    app: &AppHandle,
+    phase: impl Into<String>,
+    current: usize,
+    total: usize,
+    message: impl Into<String>,
+) {
     let progress = SyncProgress {
         phase: phase.into(),
         current,
@@ -46,11 +52,13 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
             .map_err(|e| format!("Failed to create directory {:?}: {}", dst, e))?;
     }
 
-    for entry in fs::read_dir(src)
-        .map_err(|e| format!("Failed to read directory {:?}: {}", src, e))?
+    for entry in
+        fs::read_dir(src).map_err(|e| format!("Failed to read directory {:?}: {}", src, e))?
     {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
-        let file_type = entry.file_type().map_err(|e| format!("Failed to read file type: {}", e))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("Failed to read file type: {}", e))?;
         let dest_path = dst.join(entry.file_name());
 
         if file_type.is_dir() {
@@ -88,7 +96,7 @@ impl DataService {
 
         eprintln!("[SYNC] 创建 HTTP 客户端");
         let client = Self::create_http_client()?;
-        
+
         eprintln!("[SYNC] 获取最新 commit");
         let remote_commit = match self.fetch_latest_commit(&client) {
             Ok(commit) => {
@@ -114,7 +122,7 @@ impl DataService {
             .clone()
             .unwrap_or_else(|| DEFAULT_BRANCH.to_string());
         eprintln!("[SYNC] 使用引用: {}", reference);
-        
+
         eprintln!("[SYNC] 开始下载和解压");
         self.download_and_extract(&client, &app, &reference)?;
         eprintln!("[SYNC] 下载和解压完成");
@@ -144,7 +152,11 @@ impl DataService {
             } else {
                 info.commit.as_str()
             };
-            Ok(format!("{} ({})", commit_short, format_timestamp(info.fetched_at)))
+            Ok(format!(
+                "{} ({})",
+                commit_short,
+                format_timestamp(info.fetched_at)
+            ))
         } else {
             Ok("未安装".to_string())
         }
@@ -154,7 +166,11 @@ impl DataService {
         let client = Self::create_http_client()?;
         match self.fetch_latest_commit(&client) {
             Ok(commit) => {
-                let short = if commit.len() >= 7 { &commit[..7] } else { commit.as_str() };
+                let short = if commit.len() >= 7 {
+                    &commit[..7]
+                } else {
+                    commit.as_str()
+                };
                 Ok(short.to_string())
             }
             Err(_) => Ok("未知".to_string()),
@@ -227,13 +243,10 @@ impl DataService {
         emit_progress(app, "下载", 0, 1, format!("从 {} 下载", reference));
 
         eprintln!("[SYNC] 发起 HTTP GET 请求");
-        let mut response = client
-            .get(&download_url)
-            .send()
-            .map_err(|e| {
-                eprintln!("[SYNC ERROR] HTTP 请求失败: {}", e);
-                format!("Download failed: {}", e)
-            })?;
+        let mut response = client.get(&download_url).send().map_err(|e| {
+            eprintln!("[SYNC ERROR] HTTP 请求失败: {}", e);
+            format!("Download failed: {}", e)
+        })?;
 
         eprintln!("[SYNC] HTTP 状态码: {}", response.status());
         if !response.status().is_success() {
@@ -264,13 +277,12 @@ impl DataService {
                 "下载",
                 downloaded,
                 total,
-                format!(
-                    "已下载 {:.1}%",
-                    (downloaded as f64 / total as f64) * 100.0
-                ),
+                format!("已下载 {:.1}%", (downloaded as f64 / total as f64) * 100.0),
             );
         }
-        zip_file.flush().map_err(|e| format!("Failed to flush zip file: {}", e))?;
+        zip_file
+            .flush()
+            .map_err(|e| format!("Failed to flush zip file: {}", e))?;
 
         emit_progress(app, "解压", 0, 1, "正在解压数据");
 
@@ -284,8 +296,8 @@ impl DataService {
 
         let zip_file = fs::File::open(&zip_path)
             .map_err(|e| format!("Failed to open downloaded zip: {}", e))?;
-        let mut archive = ZipArchive::new(zip_file)
-            .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+        let mut archive =
+            ZipArchive::new(zip_file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
         let total_entries = archive.len();
         for i in 0..total_entries {
@@ -369,18 +381,17 @@ impl DataService {
         let path = self.version_file_path();
         let content = serde_json::to_string_pretty(info)
             .map_err(|e| format!("Failed to serialize version info: {}", e))?;
-        fs::write(&path, content)
-            .map_err(|e| format!("Failed to write version info: {}", e))
+        fs::write(&path, content).map_err(|e| format!("Failed to write version info: {}", e))
     }
 }
 
 /// 格式化时间戳
 fn format_timestamp(timestamp: i64) -> String {
-    use std::time::{SystemTime, UNIX_EPOCH, Duration};
-    
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
     let duration = Duration::from_secs(timestamp as u64);
     let datetime = UNIX_EPOCH + duration;
-    
+
     if let Ok(elapsed) = SystemTime::now().duration_since(datetime) {
         let days = elapsed.as_secs() / 86400;
         if days == 0 {
@@ -394,7 +405,7 @@ fn format_timestamp(timestamp: i64) -> String {
             return format!("{}天前", days);
         }
     }
-    
+
     "较早前".to_string()
 }
 
@@ -404,18 +415,19 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        let chapter_file = self.data_dir
+        let chapter_file = self
+            .data_dir
             .join("zh_CN/gamedata/excel/chapter_table.json");
-        
+
         let content = fs::read_to_string(&chapter_file)
             .map_err(|e| format!("Failed to read chapter file: {}", e))?;
-        
+
         let data: HashMap<String, Chapter> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse chapter data: {}", e))?;
-        
+
         let mut chapters: Vec<Chapter> = data.into_values().collect();
         chapters.sort_by_key(|c| c.chapter_index);
-        
+
         Ok(chapters)
     }
 
@@ -424,17 +436,18 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        let story_review_file = self.data_dir
+        let story_review_file = self
+            .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
-        
+
         let content = fs::read_to_string(&story_review_file)
             .map_err(|e| format!("Failed to read story review file: {}", e))?;
-        
+
         let data: HashMap<String, Value> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
-        
+
         let mut activities = Vec::new();
-        
+
         for (id, value) in data.iter() {
             if let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) {
                 if entry_type == "ACTIVITY" {
@@ -447,7 +460,7 @@ impl DataService {
                 }
             }
         }
-        
+
         Ok(activities)
     }
 
@@ -472,23 +485,28 @@ impl DataService {
 
     /// 获取主线剧情
     fn get_main_stories(&self) -> Result<Vec<StoryEntry>, String> {
-        let story_review_file = self.data_dir
+        let story_review_file = self
+            .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
-        
+
         let content = fs::read_to_string(&story_review_file)
             .map_err(|e| format!("Failed to read story review file: {}", e))?;
-        
+
         let data: HashMap<String, Value> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
-        
+
         let mut stories = Vec::new();
-        
+
         for (_id, value) in data.iter() {
             if let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) {
                 if entry_type == "MAIN_STORY" {
-                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                    if let Some(unlock_datas) =
+                        value.get("infoUnlockDatas").and_then(|v| v.as_array())
+                    {
                         for unlock_data in unlock_datas {
-                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                            if let Ok(story) =
+                                serde_json::from_value::<StoryEntry>(unlock_data.clone())
+                            {
                                 stories.push(story);
                             }
                         }
@@ -496,38 +514,38 @@ impl DataService {
                 }
             }
         }
-        
+
         stories.sort_by_key(|s| s.story_sort);
         Ok(stories)
     }
 
     /// 读取剧情文本
     pub fn read_story_text(&self, story_path: &str) -> Result<String, String> {
-        let full_path = self.data_dir
+        let full_path = self
+            .data_dir
             .join("zh_CN/gamedata/story")
             .join(format!("{}.txt", story_path));
-        
-        fs::read_to_string(&full_path)
-            .map_err(|e| format!("Failed to read story file: {}", e))
+
+        fs::read_to_string(&full_path).map_err(|e| format!("Failed to read story file: {}", e))
     }
 
     /// 读取剧情简介
     pub fn read_story_info(&self, info_path: &str) -> Result<String, String> {
-        let full_path = self.data_dir
+        let full_path = self
+            .data_dir
             .join("zh_CN/gamedata/story")
             .join(format!("{}.txt", info_path));
-        
-        fs::read_to_string(&full_path)
-            .map_err(|e| format!("Failed to read info file: {}", e))
+
+        fs::read_to_string(&full_path).map_err(|e| format!("Failed to read info file: {}", e))
     }
 
     /// 搜索剧情
     pub fn search_stories(&self, query: &str) -> Result<Vec<SearchResult>, String> {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
-        
+
         let categories = self.get_story_categories()?;
-        
+
         for category in categories {
             for story in category.stories {
                 // 搜索剧情名称
@@ -540,7 +558,7 @@ impl DataService {
                     });
                     continue;
                 }
-                
+
                 // 搜索剧情内容
                 if let Ok(content) = self.read_story_text(&story.story_txt) {
                     if content.to_lowercase().contains(&query_lower) {
@@ -556,7 +574,7 @@ impl DataService {
                 }
             }
         }
-        
+
         Ok(results)
     }
 

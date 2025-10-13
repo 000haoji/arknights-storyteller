@@ -100,5 +100,3 @@ pub struct SearchResult {
     pub matched_text: String,
     pub category: String,
 }
-
-

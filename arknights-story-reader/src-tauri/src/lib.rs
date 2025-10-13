@@ -1,31 +1,32 @@
+mod commands;
+mod data_service;
 mod models;
 mod parser;
-mod data_service;
-mod commands;
 
-use std::sync::Mutex;
-use std::sync::Arc;
-use tauri::Manager;
 use commands::AppState;
 use data_service::DataService;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let app_data_dir = app.path().app_data_dir()
+            let app_data_dir = app
+                .path()
+                .app_data_dir()
                 .expect("Failed to get app data directory");
-            
-            std::fs::create_dir_all(&app_data_dir)
-                .expect("Failed to create app data directory");
-            
+
+            std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
+
             let data_service = DataService::new(app_data_dir);
 
             app.manage(AppState {
                 data_service: Arc::new(Mutex::new(data_service)),
             });
-            
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

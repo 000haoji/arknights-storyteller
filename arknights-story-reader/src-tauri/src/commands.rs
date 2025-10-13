@@ -1,8 +1,8 @@
-use tauri::{State, AppHandle};
-use std::sync::{Arc, Mutex};
 use crate::data_service::DataService;
+use crate::models::{Chapter, ParsedStoryContent, SearchResult, StoryCategory};
 use crate::parser::parse_story_text;
-use crate::models::{StoryCategory, Chapter, ParsedStoryContent, SearchResult};
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, State};
 
 pub struct AppState {
     pub data_service: Arc<Mutex<DataService>>,
@@ -16,10 +16,19 @@ fn lock_service(mutex: &Arc<Mutex<DataService>>) -> std::sync::MutexGuard<'_, Da
     })
 }
 
+fn clone_service(state: &State<'_, AppState>) -> DataService {
+    let guard = lock_service(&state.data_service);
+    let service = guard.clone();
+    drop(guard);
+    service
+}
+
 #[tauri::command]
 pub async fn sync_data(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let service = lock_service(&state.data_service);
-    service.sync_data(app)
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.sync_data(app))
+        .await
+        .map_err(|err| format!("Failed to join sync task: {}", err))?
 }
 
 #[tauri::command]
@@ -30,14 +39,18 @@ pub async fn get_current_version(state: State<'_, AppState>) -> Result<String, S
 
 #[tauri::command]
 pub async fn get_remote_version(state: State<'_, AppState>) -> Result<String, String> {
-    let service = lock_service(&state.data_service);
-    service.get_remote_version()
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_remote_version())
+        .await
+        .map_err(|err| format!("Failed to join remote version task: {}", err))?
 }
 
 #[tauri::command]
 pub async fn check_update(state: State<'_, AppState>) -> Result<bool, String> {
-    let service = lock_service(&state.data_service);
-    service.check_update()
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.check_update())
+        .await
+        .map_err(|err| format!("Failed to join check update task: {}", err))?
 }
 
 #[tauri::command]
@@ -53,7 +66,9 @@ pub async fn get_chapters(state: State<'_, AppState>) -> Result<Vec<Chapter>, St
 }
 
 #[tauri::command]
-pub async fn get_story_categories(state: State<'_, AppState>) -> Result<Vec<StoryCategory>, String> {
+pub async fn get_story_categories(
+    state: State<'_, AppState>,
+) -> Result<Vec<StoryCategory>, String> {
     let service = lock_service(&state.data_service);
     service.get_story_categories()
 }
@@ -85,4 +100,3 @@ pub async fn search_stories(
     let service = lock_service(&state.data_service);
     service.search_stories(&query)
 }
-
