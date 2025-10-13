@@ -166,7 +166,12 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
               disabled={syncing}
               className="flex-1"
             >
-              {syncing ? "同步中..." : (hasUpdate || currentVersion === "未安装") ? "开始同步" : "已是最新"}
+              {syncing 
+                ? "同步中..." 
+                : (currentVersion === "未安装" || currentVersion === "" || hasUpdate) 
+                  ? "开始同步" 
+                  : "已是最新"
+              }
             </Button>
           </div>
         </CardContent>

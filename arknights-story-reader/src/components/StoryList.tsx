@@ -75,9 +75,9 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部操作栏 */}
-      <header className="sticky top-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
+      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
         <div className="container flex items-center justify-between h-14">
           <h1 className="text-lg font-semibold">明日方舟剧情</h1>
           <Button 
@@ -95,7 +95,8 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       </header>
 
       {/* 分类列表 */}
-      <main className="container py-6 space-y-6">
+      <main className="flex-1 overflow-y-auto">
+        <div className="container py-6 space-y-6">
         {categories.map((category) => (
           <Card key={category.id}>
             <CardHeader>
@@ -133,6 +134,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
             </CardContent>
           </Card>
         ))}
+        </div>
       </main>
 
       {/* 同步对话框 */}

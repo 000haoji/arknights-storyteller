@@ -3,14 +3,15 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Settings() {
   return (
-    <div className="min-h-screen pb-20">
-      <header className="sticky top-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
+    <div className="h-full flex flex-col overflow-hidden">
+      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
         <div className="container flex items-center h-14">
           <h1 className="text-lg font-semibold">设置</h1>
         </div>
       </header>
 
-      <main className="container py-6 space-y-6">
+      <main className="flex-1 overflow-y-auto">
+        <div className="container py-6 space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>外观</CardTitle>
@@ -43,6 +44,7 @@ export function Settings() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </main>
     </div>
   );

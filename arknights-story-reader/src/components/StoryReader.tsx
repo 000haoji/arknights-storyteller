@@ -110,9 +110,9 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   const currentSegments = content.segments.slice(startIndex, endIndex);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部导航栏 */}
-      <header className="sticky top-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
+      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
         <div className="container flex items-center gap-4 h-14">
           <Button variant="ghost" size="icon" onClick={onBack}>
             <ArrowLeft className="h-5 w-5" />
@@ -125,12 +125,14 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       </header>
 
       {/* 阅读内容区域 */}
-      <main className="flex-1 reader-content touch-action-pan-y pb-20">
-        {currentSegments.map((segment, index) => renderSegment(segment, startIndex + index))}
+      <main className="flex-1 overflow-y-auto touch-action-pan-y">
+        <div className="reader-content pb-20">
+          {currentSegments.map((segment, index) => renderSegment(segment, startIndex + index))}
+        </div>
       </main>
 
       {/* 底部翻页按钮 */}
-      <footer className="sticky bottom-0 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-t p-4">
+      <footer className="flex-shrink-0 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-t p-4">
         <div className="container flex items-center justify-between gap-4">
           <Button
             variant="outline"

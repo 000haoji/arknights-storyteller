@@ -52,6 +52,13 @@
   border-color: hsl(var(--color-border));
 }
 
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background-color: hsl(var(--color-background));
   color: hsl(var(--color-foreground));
