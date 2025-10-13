@@ -1,46 +1,60 @@
 use tauri::{State, AppHandle};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use crate::data_service::DataService;
 use crate::parser::parse_story_text;
 use crate::models::{StoryCategory, Chapter, ParsedStoryContent, SearchResult};
 
 pub struct AppState {
-    pub data_service: Mutex<DataService>,
+    pub data_service: Arc<Mutex<DataService>>,
+}
+
+// 安全获取锁，即使 Mutex 被 panic 污染也能恢复
+fn lock_service(mutex: &Arc<Mutex<DataService>>) -> std::sync::MutexGuard<'_, DataService> {
+    mutex.lock().unwrap_or_else(|poisoned| {
+        eprintln!("[WARNING] Mutex was poisoned, recovering data");
+        poisoned.into_inner()
+    })
 }
 
 #[tauri::command]
 pub async fn sync_data(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.sync_data(app)
 }
 
 #[tauri::command]
 pub async fn get_current_version(state: State<'_, AppState>) -> Result<String, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.get_current_version()
 }
 
 #[tauri::command]
 pub async fn get_remote_version(state: State<'_, AppState>) -> Result<String, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.get_remote_version()
 }
 
 #[tauri::command]
 pub async fn check_update(state: State<'_, AppState>) -> Result<bool, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.check_update()
 }
 
 #[tauri::command]
+pub async fn is_installed(state: State<'_, AppState>) -> Result<bool, String> {
+    let service = lock_service(&state.data_service);
+    Ok(service.is_installed())
+}
+
+#[tauri::command]
 pub async fn get_chapters(state: State<'_, AppState>) -> Result<Vec<Chapter>, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.get_chapters()
 }
 
 #[tauri::command]
 pub async fn get_story_categories(state: State<'_, AppState>) -> Result<Vec<StoryCategory>, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.get_story_categories()
 }
 
@@ -49,7 +63,7 @@ pub async fn get_story_content(
     state: State<'_, AppState>,
     story_path: String,
 ) -> Result<ParsedStoryContent, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     let content = service.read_story_text(&story_path)?;
     Ok(parse_story_text(&content))
 }
@@ -59,7 +73,7 @@ pub async fn get_story_info(
     state: State<'_, AppState>,
     info_path: String,
 ) -> Result<String, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.read_story_info(&info_path)
 }
 
@@ -68,7 +82,7 @@ pub async fn search_stories(
     state: State<'_, AppState>,
     query: String,
 ) -> Result<Vec<SearchResult>, String> {
-    let service = state.data_service.lock().unwrap();
+    let service = lock_service(&state.data_service);
     service.search_stories(&query)
 }
 

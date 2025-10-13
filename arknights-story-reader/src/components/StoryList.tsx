@@ -17,7 +17,38 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
 
   useEffect(() => {
-    loadCategories();
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // 3s 安全超时，防止 isInstalled 因异常挂起
+        const withTimeout = <T,>(p: Promise<T>, ms = 3000) =>
+          new Promise<T>((resolve, reject) => {
+            const t = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+            p.then((v) => { clearTimeout(t); resolve(v); })
+             .catch((e) => { clearTimeout(t); reject(e); });
+          });
+
+        const installed = await withTimeout(api.isInstalled());
+        if (cancelled) return;
+
+        if (!installed) {
+          console.log("[StoryList] 未安装，打开同步对话框");
+          setSyncDialogOpen(true);
+          setLoading(false);
+          return;
+        }
+        await loadCategories();
+      } catch (e) {
+        if (cancelled) return;
+        console.error("[StoryList] isInstalled 失败，回退到同步对话框:", e);
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+        setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const loadCategories = async () => {
@@ -25,13 +56,31 @@ export function StoryList({ onSelectStory }: StoryListProps) {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getStoryCategories();
+
+      const withTimeout = <T,>(p: Promise<T>, ms = 8000) =>
+        new Promise<T>((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+          p.then((v) => { clearTimeout(t); resolve(v); })
+           .catch((e) => { clearTimeout(t); reject(e); });
+        });
+
+      const data = await withTimeout(api.getStoryCategories());
       console.log("[StoryList] 剧情分类加载成功，数量:", data.length);
       setCategories(data);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "加载失败";
       console.error("[StoryList] 加载剧情分类失败:", errorMsg, err);
-      setError(errorMsg);
+      // 未安装或超时，提示同步
+      if (
+        errorMsg.includes("NOT_INSTALLED") ||
+        errorMsg.includes("No such file") ||
+        errorMsg === "TIMEOUT"
+      ) {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
     } finally {
       setLoading(false);
     }

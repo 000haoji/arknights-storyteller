@@ -61,7 +61,7 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
     try {
       setSyncing(true);
       setError(null);
-      setProgress(null);
+      setProgress({ phase: "准备", current: 0, total: 1, message: "准备开始..." });
       console.log("[SyncDialog] 调用 syncData API");
       await api.syncData();
       console.log("[SyncDialog] 同步成功，调用 onSuccess 回调");
@@ -101,13 +101,19 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
               <span className="text-sm text-[hsl(var(--color-muted-foreground))]">最新版本</span>
               <span className="text-sm font-mono">{remoteVersion || '未知'}</span>
             </div>
-            {hasUpdate && (
+            {(currentVersion === "未安装" || currentVersion === "") && (
+              <div className="flex items-center gap-2 text-sm text-[hsl(var(--color-primary))]">
+                <AlertCircle className="h-4 w-4" />
+                <span>需要首次安装</span>
+              </div>
+            )}
+            {currentVersion !== "未安装" && currentVersion !== "" && hasUpdate && (
               <div className="flex items-center gap-2 text-sm text-[hsl(var(--color-primary))]">
                 <AlertCircle className="h-4 w-4" />
                 <span>有新版本可用</span>
               </div>
             )}
-            {!hasUpdate && currentVersion !== "未安装" && (
+            {currentVersion !== "未安装" && currentVersion !== "" && !hasUpdate && (
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <CheckCircle className="h-4 w-4" />
                 <span>已是最新版本</span>
@@ -116,25 +122,40 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
           </div>
 
           {/* 进度条 */}
-          {progress && (
+          {(progress || syncing) && (
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-[hsl(var(--color-muted-foreground))]">{progress.phase}</span>
-                <span className="font-mono">
-                  {progress.current}/{progress.total}
-                </span>
-              </div>
-              <div className="w-full bg-[hsl(var(--color-secondary))] rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-[hsl(var(--color-primary))] h-full transition-all duration-300"
-                  style={{
-                    width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-              <p className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                {progress.message}
-              </p>
+              {progress ? (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[hsl(var(--color-muted-foreground))]">{progress.phase}</span>
+                    <span className="font-mono">
+                      {progress.current}/{progress.total}
+                    </span>
+                  </div>
+                  <div className="w-full bg-[hsl(var(--color-secondary))] rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-[hsl(var(--color-primary))] h-full transition-all duration-300"
+                      style={{
+                        width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                    {progress.message}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[hsl(var(--color-muted-foreground))]">连接中</span>
+                    <span className="font-mono">…</span>
+                  </div>
+                  <div className="w-full bg-[hsl(var(--color-secondary))] rounded-full h-2 overflow-hidden">
+                    <div className="bg-[hsl(var(--color-primary))] h-full animate-pulse" style={{ width: '30%' }} />
+                  </div>
+                  <p className="text-xs text-[hsl(var(--color-muted-foreground))]">正在开始同步…</p>
+                </>
+              )}
             </div>
           )}
 

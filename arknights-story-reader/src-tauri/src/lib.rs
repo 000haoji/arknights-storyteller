@@ -4,6 +4,7 @@ mod data_service;
 mod commands;
 
 use std::sync::Mutex;
+use std::sync::Arc;
 use tauri::Manager;
 use commands::AppState;
 use data_service::DataService;
@@ -20,9 +21,9 @@ pub fn run() {
                 .expect("Failed to create app data directory");
             
             let data_service = DataService::new(app_data_dir);
-            
+
             app.manage(AppState {
-                data_service: Mutex::new(data_service),
+                data_service: Arc::new(Mutex::new(data_service)),
             });
             
             Ok(())
@@ -32,6 +33,7 @@ pub fn run() {
             commands::get_current_version,
             commands::get_remote_version,
             commands::check_update,
+            commands::is_installed,
             commands::get_chapters,
             commands::get_story_categories,
             commands::get_story_content,

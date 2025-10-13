@@ -47,12 +47,14 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
-      <div className="pb-16">
-        {activeTab === "stories" && <StoryList onSelectStory={handleSelectStory} />}
-        {activeTab === "search" && <SearchPanel onSelectResult={handleSearchResult} />}
-        {activeTab === "settings" && <Settings />}
+      <div className="h-full flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-hidden">
+          {activeTab === "stories" && <StoryList onSelectStory={handleSelectStory} />}
+          {activeTab === "search" && <SearchPanel onSelectResult={handleSearchResult} />}
+          {activeTab === "settings" && <Settings />}
+        </div>
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
     </ThemeProvider>
   );
 }

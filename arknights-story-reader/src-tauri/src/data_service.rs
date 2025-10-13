@@ -64,11 +64,17 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Clone)]
 pub struct DataService {
     data_dir: PathBuf,
 }
 
 impl DataService {
+    pub fn is_installed(&self) -> bool {
+        self.data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json")
+            .exists()
+    }
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
             data_dir: app_data_dir.join("ArknightsGameData"),
@@ -77,16 +83,22 @@ impl DataService {
 
     /// 下载并解压最新数据包
     pub fn sync_data(&self, app: AppHandle) -> Result<(), String> {
+        eprintln!("[SYNC] === 开始同步数据 ===");
         emit_progress(&app, "准备", 0, 1, "正在初始化同步环境");
 
+        eprintln!("[SYNC] 创建 HTTP 客户端");
         let client = Self::create_http_client()?;
+        
+        eprintln!("[SYNC] 获取最新 commit");
         let remote_commit = match self.fetch_latest_commit(&client) {
             Ok(commit) => {
+                eprintln!("[SYNC] 成功获取 commit: {}", &commit);
                 let short = commit.get(..7).unwrap_or(commit.as_str());
                 emit_progress(&app, "准备", 1, 1, format!("最新版本 {}", short));
                 Some(commit)
             }
             Err(err) => {
+                eprintln!("[SYNC] 获取 commit 失败: {}", err);
                 emit_progress(
                     &app,
                     "准备",
@@ -101,9 +113,14 @@ impl DataService {
         let reference = remote_commit
             .clone()
             .unwrap_or_else(|| DEFAULT_BRANCH.to_string());
+        eprintln!("[SYNC] 使用引用: {}", reference);
+        
+        eprintln!("[SYNC] 开始下载和解压");
         self.download_and_extract(&client, &app, &reference)?;
+        eprintln!("[SYNC] 下载和解压完成");
 
         // 写入版本信息
+        eprintln!("[SYNC] 写入版本信息");
         let commit_to_store = remote_commit.unwrap_or_else(|| "unknown".to_string());
         let fetched_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -115,6 +132,7 @@ impl DataService {
         };
         self.write_version(&info)?;
 
+        eprintln!("[SYNC] === 同步完成 ===");
         emit_progress(&app, "完成", 1, 1, "同步完成");
         Ok(())
     }
@@ -151,7 +169,13 @@ impl DataService {
 
         let client = Self::create_http_client()?;
         match self.fetch_latest_commit(&client) {
-            Ok(remote) => Ok(current.unwrap().commit != remote),
+            Ok(remote) => {
+                if let Some(cur) = current {
+                    Ok(cur.commit != remote)
+                } else {
+                    Ok(true)
+                }
+            }
             Err(_) => Ok(true),
         }
     }
@@ -191,19 +215,27 @@ impl DataService {
         app: &AppHandle,
         reference: &str,
     ) -> Result<(), String> {
+        eprintln!("[SYNC] download_and_extract 开始");
         let parent_dir = self
             .data_dir
             .parent()
             .ok_or_else(|| "Invalid data directory".to_string())?;
+        eprintln!("[SYNC] parent_dir: {:?}", parent_dir);
 
         let download_url = format!("{}/{}", REPO_DOWNLOAD_URL, reference);
+        eprintln!("[SYNC] download_url: {}", download_url);
         emit_progress(app, "下载", 0, 1, format!("从 {} 下载", reference));
 
+        eprintln!("[SYNC] 发起 HTTP GET 请求");
         let mut response = client
             .get(&download_url)
             .send()
-            .map_err(|e| format!("Download failed: {}", e))?;
+            .map_err(|e| {
+                eprintln!("[SYNC ERROR] HTTP 请求失败: {}", e);
+                format!("Download failed: {}", e)
+            })?;
 
+        eprintln!("[SYNC] HTTP 状态码: {}", response.status());
         if !response.status().is_success() {
             return Err(format!("Download returned status {}", response.status()));
         }
@@ -369,6 +401,9 @@ fn format_timestamp(timestamp: i64) -> String {
 impl DataService {
     /// 获取所有章节
     pub fn get_chapters(&self) -> Result<Vec<Chapter>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
         let chapter_file = self.data_dir
             .join("zh_CN/gamedata/excel/chapter_table.json");
         
@@ -386,6 +421,9 @@ impl DataService {
 
     /// 获取所有活动
     pub fn get_activities(&self) -> Result<Vec<Activity>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
         let story_review_file = self.data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
         
@@ -415,32 +453,20 @@ impl DataService {
 
     /// 获取分类的剧情列表
     pub fn get_story_categories(&self) -> Result<Vec<StoryCategory>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
         let mut categories = Vec::new();
-        
-        // 主线剧情
+
+        // 仅返回主线分类，活动分类改为懒加载，避免初次解析大文件卡顿
         let main_stories = self.get_main_stories()?;
-        if !main_stories.is_empty() {
-            categories.push(StoryCategory {
-                id: "main".to_string(),
-                name: "主线剧情".to_string(),
-                category_type: "chapter".to_string(),
-                stories: main_stories,
-            });
-        }
-        
-        // 活动剧情
-        let activities = self.get_activities()?;
-        for activity in activities {
-            if !activity.info_unlock_datas.is_empty() {
-                categories.push(StoryCategory {
-                    id: activity.id.clone(),
-                    name: activity.name.clone(),
-                    category_type: "activity".to_string(),
-                    stories: activity.info_unlock_datas,
-                });
-            }
-        }
-        
+        categories.push(StoryCategory {
+            id: "main".to_string(),
+            name: "主线剧情".to_string(),
+            category_type: "chapter".to_string(),
+            stories: main_stories,
+        });
+
         Ok(categories)
     }
 

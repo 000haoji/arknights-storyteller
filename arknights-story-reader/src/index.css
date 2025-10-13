@@ -69,6 +69,23 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 页面统一左右留白与最大宽度 */
+.container {
+  width: 100%;
+  max-width: 68rem; /* ~1088px，阅读更舒适 */
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;  /* 16px */
+  padding-right: 1rem; /* 16px */
+}
+
+@media (min-width: 768px) {
+  .container { padding-left: 1.25rem; padding-right: 1.25rem; }
+}
+@media (min-width: 1024px) {
+  .container { padding-left: 1.5rem; padding-right: 1.5rem; }
+}
+
 /* 针对小说阅读器的优化样式 */
 .reader-content {
   max-width: 56rem;

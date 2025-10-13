@@ -15,6 +15,18 @@ export interface SyncProgress {
 }
 
 export const api = {
+  // 是否已安装数据
+  isInstalled: async (): Promise<boolean> => {
+    console.log("[API] 调用 is_installed");
+    try {
+      const ok = await invoke<boolean>("is_installed");
+      console.log("[API] is_installed:", ok);
+      return ok;
+    } catch (error) {
+      console.error("[API] is_installed 失败:", error);
+      return false;
+    }
+  },
   // 同步数据
   syncData: async (): Promise<void> => {
     console.log("[API] 开始调用 sync_data 命令");
