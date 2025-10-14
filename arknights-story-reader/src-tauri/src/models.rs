@@ -74,6 +74,24 @@ pub enum StorySegment {
     Decision {
         options: Vec<String>,
     },
+    System {
+        #[serde(rename = "speaker")]
+        speaker: Option<String>,
+        text: String,
+    },
+    Subtitle {
+        text: String,
+        #[serde(rename = "alignment")]
+        alignment: Option<String>,
+    },
+    Sticker {
+        text: String,
+        #[serde(rename = "alignment")]
+        alignment: Option<String>,
+    },
+    Header {
+        title: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

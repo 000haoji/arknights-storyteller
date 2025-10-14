@@ -15,9 +15,9 @@ export interface ReaderSettings {
 const DEFAULT_SETTINGS: ReaderSettings = {
   fontFamily: "system",
   fontSize: 18,
-  lineHeight: 2,
+  lineHeight: 1.8,
   letterSpacing: 0,
-  paragraphSpacing: 2, // rem
+  paragraphSpacing: 0.9, // rem
   pageWidth: 100, // 100%
   textAlign: 'justify',
   theme: 'default',
@@ -62,4 +62,3 @@ export const FONT_FAMILIES = [
   { value: "'PingFang SC', -apple-system, sans-serif", label: "苹方" },
   { value: "'Noto Serif SC', serif", label: "思源宋体" },
 ];
-

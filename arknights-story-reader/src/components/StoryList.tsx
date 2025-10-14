@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { BookOpen, RefreshCw } from "lucide-react";
 import { SyncDialog } from "@/components/SyncDialog";
 import { Collapsible } from "@/components/ui/collapsible";
+import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 interface StoryListProps {
   onSelectStory: (story: StoryEntry) => void;
@@ -223,87 +224,91 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       </header>
 
       {/* 分类列表 */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="container py-6 pb-20 space-y-6">
-        <div className="grid gap-4">
-          <CategoryCard
-            title="主线剧情"
-            description="主线章节"
-            active={activeCategory === "main"}
-            onClick={() => setActiveCategory("main")}
-          />
-          <CategoryCard
-            title="活动剧情"
-            description="活动剧情列表"
-            active={activeCategory === "activity"}
-            onClick={() => {
-              setActiveCategory("activity");
-              if (!activityLoaded) {
-                loadActivities();
-              }
-            }}
-          />
-          <CategoryCard
-            title="追忆集"
-            description="干员密录故事"
-            active={activeCategory === "memory"}
-            onClick={() => {
-              setActiveCategory("memory");
-              if (!memoryLoaded) {
-                loadMemories();
-              }
-            }}
-          />
-        </div>
-
-        <div className="mt-4 space-y-4">
-          {activeCategory === 'main' && (
-            mainGrouped.length > 0 ? (
-              mainGrouped.map(([chapterName, stories], index) => (
-                <Collapsible key={`chapter-${index}`} title={chapterName} defaultOpen={index === 0}>
-                  {stories.map((story) => (
-                    <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
-                  ))}
-                </Collapsible>
-              ))
-            ) : (
-              <EmptyState message="暂无主线剧情，可能需要同步。" />
-            )
-          )}
-
-          {activeCategory === 'activity' && (
-            <div className="space-y-3">
-              {activityLoading && (
-                <EmptyState message="活动剧情加载中..." />
-              )}
-              {!activityLoading && activityGrouped.length === 0 && (
-                <EmptyState message="暂无活动剧情或需要同步" />
-              )}
-              {!activityLoading && activityGrouped.map(([activityName, stories], index) => (
-                <Collapsible key={`activity-${index}`} title={activityName} defaultOpen={index === 0}>
-                  {stories.map((story) => (
-                    <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
-                  ))}
-                </Collapsible>
-              ))}
+      <main className="flex-1 overflow-hidden">
+        <CustomScrollArea
+          className="h-full"
+          viewportClassName="reader-scroll"
+          trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
+        >
+          <div className="container py-6 pb-24 space-y-6">
+            <div className="grid gap-4">
+              <CategoryCard
+                title="主线剧情"
+                description="主线章节"
+                active={activeCategory === "main"}
+                onClick={() => setActiveCategory("main")}
+              />
+              <CategoryCard
+                title="活动剧情"
+                description="活动剧情列表"
+                active={activeCategory === "activity"}
+                onClick={() => {
+                  setActiveCategory("activity");
+                  if (!activityLoaded) {
+                    loadActivities();
+                  }
+                }}
+              />
+              <CategoryCard
+                title="追忆集"
+                description="干员密录故事"
+                active={activeCategory === "memory"}
+                onClick={() => {
+                  setActiveCategory("memory");
+                  if (!memoryLoaded) {
+                    loadMemories();
+                  }
+                }}
+              />
             </div>
-          )}
 
-          {activeCategory === 'memory' && (
-            <div className="space-y-2">
-              {memoryLoading && (
-                <EmptyState message="追忆集加载中..." />
+            <div className="mt-4 space-y-4">
+              {activeCategory === "main" && (
+                mainGrouped.length > 0 ? (
+                  mainGrouped.map(([chapterName, stories], index) => (
+                    <Collapsible key={`chapter-${index}`} title={chapterName} defaultOpen={index === 0}>
+                      {stories.map((story) => (
+                        <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+                      ))}
+                    </Collapsible>
+                  ))
+                ) : (
+                  <EmptyState message="暂无主线剧情，可能需要同步。" />
+                )
               )}
-              {!memoryLoading && memoryStories.length === 0 && (
-                <EmptyState message="暂无追忆集或需要同步" />
+
+              {activeCategory === "activity" && (
+                <div className="space-y-3">
+                  {activityLoading && <EmptyState message="活动剧情加载中..." />}
+                  {!activityLoading && activityGrouped.length === 0 && (
+                    <EmptyState message="暂无活动剧情或需要同步" />
+                  )}
+                  {!activityLoading &&
+                    activityGrouped.map(([activityName, stories], index) => (
+                      <Collapsible key={`activity-${index}`} title={activityName} defaultOpen={index === 0}>
+                        {stories.map((story) => (
+                          <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+                        ))}
+                      </Collapsible>
+                    ))}
+                </div>
               )}
-              {!memoryLoading && memoryStories.map((story) => (
-                <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
-              ))}
+
+              {activeCategory === "memory" && (
+                <div className="space-y-2">
+                  {memoryLoading && <EmptyState message="追忆集加载中..." />}
+                  {!memoryLoading && memoryStories.length === 0 && (
+                    <EmptyState message="暂无追忆集或需要同步" />
+                  )}
+                  {!memoryLoading &&
+                    memoryStories.map((story) => (
+                      <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+                    ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        </div>
+          </div>
+        </CustomScrollArea>
       </main>
 
       {/* 同步对话框 */}

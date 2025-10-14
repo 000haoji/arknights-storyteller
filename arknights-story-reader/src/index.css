@@ -86,7 +86,12 @@ body {
   .container { padding-left: 1.5rem; padding-right: 1.5rem; }
 }
 
-/* 针对小说阅读器的优化样式 */
+/* 阅读器主题与排版优化 */
+.reader-surface {
+  background: hsl(var(--color-background));
+  color: hsl(var(--color-foreground));
+}
+
 .reader-content {
   max-width: 48rem;
   margin-left: auto;
@@ -94,8 +99,13 @@ body {
   padding: 2rem 1.5rem;
 }
 
+.reader-text {
+  color: hsl(var(--color-foreground) / 0.92);
+  white-space: pre-line;
+}
+
 .reader-paragraph {
-  margin-bottom: 2rem;
+  margin-bottom: 0;
   color: hsl(var(--color-foreground) / 0.92);
   text-align: justify;
   text-indent: 0;
@@ -104,7 +114,7 @@ body {
 .reader-character-name {
   font-weight: 600;
   color: hsl(var(--color-primary));
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.2rem;
   display: block;
   font-size: 1.05em;
 }
@@ -112,9 +122,168 @@ body {
 .reader-narration {
   font-style: italic;
   color: hsl(var(--color-muted-foreground) / 0.8);
-  margin-bottom: 1.5rem;
   padding-left: 1rem;
   border-left: 3px solid hsl(var(--color-muted) / 0.3);
+}
+
+.reader-decision {
+  padding: 1rem 1.25rem;
+  border: 1px solid hsl(var(--color-border));
+  border-radius: 0.75rem;
+  background: hsl(var(--color-secondary) / 0.3);
+}
+
+.reader-decision-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(var(--color-muted-foreground));
+  margin-bottom: 0.75rem;
+}
+
+.reader-decision-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  color: hsl(var(--color-foreground) / 0.9);
+}
+
+.reader-decision-option:last-child {
+  margin-bottom: 0;
+}
+
+.reader-decision-bullet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 9999px;
+  background: hsl(var(--color-primary) / 0.1);
+  color: hsl(var(--color-primary));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.reader-system {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: hsl(var(--color-secondary) / 0.18);
+  border: 1px dashed hsl(var(--color-border));
+  color: hsl(var(--color-foreground) / 0.92);
+}
+
+.reader-system-speaker {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: hsl(var(--color-muted-foreground));
+  margin-bottom: 0.5rem;
+}
+
+.reader-subtitle {
+  margin-bottom: 1.5rem;
+  font-style: italic;
+  color: hsl(var(--color-foreground));
+  text-align: center;
+}
+
+.reader-sticker {
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: hsl(var(--color-accent) / 0.15);
+  color: hsl(var(--color-foreground) / 0.95);
+  white-space: pre-line;
+}
+
+.reader-header {
+  margin-bottom: 1.5rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  color: hsl(var(--color-primary));
+}
+
+.reader-scroll {
+  scroll-behavior: smooth;
+}
+
+.scroll-area {
+  position: relative;
+  height: 100%;
+}
+
+.scroll-area__viewport {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.scroll-area__viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.scroll-area__track {
+  --scroll-area-track-offset-top: 0px;
+  --scroll-area-track-offset-bottom: 0px;
+  --scroll-area-track-offset-right: 0px;
+  position: absolute;
+  top: calc(clamp(0.75rem, 2vw, 1rem) + var(--scroll-area-track-offset-top));
+  bottom: calc(clamp(0.75rem, 2vw, 1rem) + var(--scroll-area-track-offset-bottom));
+  right: calc(clamp(0.2rem, 1vw, 0.6rem) + var(--scroll-area-track-offset-right));
+  width: 0.45rem;
+  border-radius: 9999px;
+  background: hsl(var(--color-secondary) / 0.12);
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  pointer-events: none;
+}
+
+.scroll-area__track[data-visible="true"] {
+  opacity: 1;
+}
+
+.scroll-area__thumb {
+  position: absolute;
+  left: 0.08rem;
+  right: 0.08rem;
+  border-radius: 9999px;
+  background: hsl(var(--color-primary));
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+}
+
+.reader-scroll--paged .reader-content {
+  min-height: calc(100vh - 12rem);
+}
+
+.progress-track {
+  position: relative;
+  height: 3px;
+  margin-left: auto;
+  margin-right: auto;
+  width: min(100%, 72rem);
+  background: hsl(var(--color-muted) / 0.4);
+}
+
+.progress-thumb {
+  height: 100%;
+  background: hsl(var(--color-primary));
+  transition: width 0.25s ease;
+}
+
+@media (max-width: 640px) {
+  .reader-content {
+    padding: 1.5rem 1rem 2rem;
+  }
 }
 
 /* 滑动条样式优化 */
@@ -160,38 +329,19 @@ input[type="range"]::-moz-range-thumb {
   touch-action: pan-y;
 }
 
-/* 自定义滚动条以匹配主题色调 */
-.custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: hsl(var(--color-primary) / 0.6) hsl(var(--color-secondary) / 0.3);
+.dark .scroll-area__track {
+  background: hsl(var(--color-secondary) / 0.2);
 }
 
-.custom-scrollbar::-webkit-scrollbar {
-  width: 0.65rem;
-  height: 0.65rem;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: hsl(var(--color-secondary) / 0.25);
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: hsl(var(--color-primary));
-  border-radius: 9999px;
-  border: 2px solid hsl(var(--color-secondary) / 0.2);
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+.dark .scroll-area__thumb {
   background: hsl(var(--color-primary) / 0.85);
+  box-shadow: 0 10px 24px rgba(8, 47, 73, 0.35);
 }
 
-.dark .custom-scrollbar::-webkit-scrollbar-track {
-  background: hsl(var(--color-secondary) / 0.35);
-}
-
-.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: hsl(var(--color-primary) / 0.9);
-  border-color: hsl(var(--color-background));
+@media (pointer: coarse) {
+  .scroll-area__track {
+    display: none;
+  }
 }
 
 .touch-action-none {

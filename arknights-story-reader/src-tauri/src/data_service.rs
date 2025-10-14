@@ -284,13 +284,7 @@ impl DataService {
             } else {
                 format!("已下载 {:.1} MB", downloaded_mb)
             };
-            emit_progress(
-                app,
-                "下载",
-                percent.round() as usize,
-                100,
-                message,
-            );
+            emit_progress(app, "下载", percent.round() as usize, 100, message);
         }
         zip_file
             .flush()
@@ -320,8 +314,8 @@ impl DataService {
 
         let zip_file = fs::File::open(zip_path)
             .map_err(|e| format!("Failed to open downloaded zip: {}", e))?;
-        let mut archive = ZipArchive::new(zip_file)
-            .map_err(|e| format!("Failed to read zip archive: {}", e))?;
+        let mut archive =
+            ZipArchive::new(zip_file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
         let total_entries = usize::max(archive.len(), 1);
         for i in 0..archive.len() {
@@ -401,8 +395,7 @@ impl DataService {
 
         let temp_path = parent_dir.join("ArknightsGameData_import.zip");
         emit_progress(&app, "导入", 0, 100, "正在复制 ZIP 文件");
-        fs::copy(source_path, &temp_path)
-            .map_err(|e| format!("复制 ZIP 文件失败: {}", e))?;
+        fs::copy(source_path, &temp_path).map_err(|e| format!("复制 ZIP 文件失败: {}", e))?;
 
         emit_progress(&app, "导入", 30, 100, "正在校验 ZIP 文件");
         self.extract_zip_at(&temp_path, parent_dir, &app)?;
@@ -531,7 +524,7 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        
+
         let story_review_file = self
             .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
@@ -699,7 +692,7 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        
+
         let story_review_file = self
             .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
@@ -712,16 +705,23 @@ impl DataService {
 
         // 按分组ID收集主线剧情
         let mut groups: HashMap<String, (String, Vec<StoryEntry>)> = HashMap::new();
-        
+
         for (id, value) in data.iter() {
             if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
                 if et == "MAINLINE" {
-                    let group_name = value.get("name").and_then(|v| v.as_str()).unwrap_or("未知章节");
-                    
-                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                    let group_name = value
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("未知章节");
+
+                    if let Some(unlock_datas) =
+                        value.get("infoUnlockDatas").and_then(|v| v.as_array())
+                    {
                         let mut stories = Vec::new();
                         for unlock_data in unlock_datas {
-                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                            if let Ok(story) =
+                                serde_json::from_value::<StoryEntry>(unlock_data.clone())
+                            {
                                 stories.push(story);
                             }
                         }
@@ -737,11 +737,21 @@ impl DataService {
             .into_iter()
             .map(|(_, (name, stories))| (name, stories))
             .collect();
-        
+
         result.sort_by(|a, b| {
             // 提取章节号进行排序
-            let a_num = a.0.chars().filter(|c| c.is_numeric()).collect::<String>().parse::<i32>().unwrap_or(0);
-            let b_num = b.0.chars().filter(|c| c.is_numeric()).collect::<String>().parse::<i32>().unwrap_or(0);
+            let a_num =
+                a.0.chars()
+                    .filter(|c| c.is_numeric())
+                    .collect::<String>()
+                    .parse::<i32>()
+                    .unwrap_or(0);
+            let b_num =
+                b.0.chars()
+                    .filter(|c| c.is_numeric())
+                    .collect::<String>()
+                    .parse::<i32>()
+                    .unwrap_or(0);
             a_num.cmp(&b_num)
         });
 
@@ -752,7 +762,7 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        
+
         let story_review_file = self
             .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");
@@ -764,20 +774,27 @@ impl DataService {
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
 
         let mut groups: Vec<(String, Vec<StoryEntry>)> = Vec::new();
-        
+
         for (_id, value) in data.iter() {
             if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
                 if et == "ACTIVITY" || et == "MINI_ACTIVITY" {
-                    let activity_name = value.get("name").and_then(|v| v.as_str()).unwrap_or("未知活动");
-                    
-                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                    let activity_name = value
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("未知活动");
+
+                    if let Some(unlock_datas) =
+                        value.get("infoUnlockDatas").and_then(|v| v.as_array())
+                    {
                         let mut stories = Vec::new();
                         for unlock_data in unlock_datas {
-                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                            if let Ok(story) =
+                                serde_json::from_value::<StoryEntry>(unlock_data.clone())
+                            {
                                 stories.push(story);
                             }
                         }
-                        
+
                         if !stories.is_empty() {
                             stories.sort_by_key(|s| s.story_sort);
                             groups.push((activity_name.to_string(), stories));
@@ -786,10 +803,10 @@ impl DataService {
                 }
             }
         }
-        
+
         // 按活动开始时间排序（最新的在前）
         groups.sort_by(|a, b| b.0.cmp(&a.0));
-        
+
         Ok(groups)
     }
 
@@ -797,7 +814,7 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        
+
         let story_review_file = self
             .data_dir
             .join("zh_CN/gamedata/excel/story_review_table.json");

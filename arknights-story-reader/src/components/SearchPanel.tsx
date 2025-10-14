@@ -4,6 +4,7 @@ import type { SearchResult } from "@/types/story";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
+import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 interface SearchPanelProps {
   onSelectResult: (storyId: string) => void;
@@ -74,45 +75,51 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
       </header>
 
       {/* 搜索结果 */}
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="container py-6 pb-20">
-        {searching && (
-          <div className="text-center text-[hsl(var(--color-muted-foreground))]">搜索中...</div>
-        )}
+      <main className="flex-1 overflow-hidden">
+        <CustomScrollArea
+          className="h-full"
+          viewportClassName="reader-scroll"
+          trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
+        >
+          <div className="container py-6 pb-24">
+            {searching && (
+              <div className="text-center text-[hsl(var(--color-muted-foreground))]">搜索中...</div>
+            )}
 
-        {!searching && searched && results.length === 0 && (
-          <div className="text-center text-[hsl(var(--color-muted-foreground))]">未找到相关剧情</div>
-        )}
+            {!searching && searched && results.length === 0 && (
+              <div className="text-center text-[hsl(var(--color-muted-foreground))]">未找到相关剧情</div>
+            )}
 
-        {!searching && results.length > 0 && (
-          <div className="space-y-3">
-            <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
-              找到 {results.length} 个结果
-            </div>
-            {results.map((result, index) => (
-              <button
-                key={`${result.storyId}-${index}`}
-                onClick={() => onSelectResult(result.storyId)}
-                className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-colors text-left"
-              >
-                <div className="font-medium mb-1">{result.storyName}</div>
-                <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-2">{result.category}</div>
-                {result.matchedText && (
-                  <div className="text-sm text-[hsl(var(--color-muted-foreground))] line-clamp-2">
-                    {result.matchedText}
-                  </div>
-                )}
-              </button>
-            ))}
+            {!searching && results.length > 0 && (
+              <div className="space-y-3">
+                <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
+                  找到 {results.length} 个结果
+                </div>
+                {results.map((result, index) => (
+                  <button
+                    key={`${result.storyId}-${index}`}
+                    onClick={() => onSelectResult(result.storyId)}
+                    className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-colors text-left"
+                  >
+                    <div className="font-medium mb-1">{result.storyName}</div>
+                    <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-2">{result.category}</div>
+                    {result.matchedText && (
+                      <div className="text-sm text-[hsl(var(--color-muted-foreground))] line-clamp-2">
+                        {result.matchedText}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!searching && !searched && (
+              <div className="text-center text-[hsl(var(--color-muted-foreground))]">
+                输入关键词搜索剧情
+              </div>
+            )}
           </div>
-        )}
-
-        {!searching && !searched && (
-          <div className="text-center text-[hsl(var(--color-muted-foreground))]">
-            输入关键词搜索剧情
-          </div>
-        )}
-        </div>
+        </CustomScrollArea>
       </main>
     </div>
   );

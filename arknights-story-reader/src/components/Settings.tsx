@@ -1,5 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 export function Settings() {
   return (
@@ -10,41 +11,47 @@ export function Settings() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="container py-6 pb-20 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>外观</CardTitle>
-            <CardDescription>自定义应用的显示效果</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">主题</div>
-                <div className="text-sm text-[hsl(var(--color-muted-foreground))]">切换亮色/暗色模式</div>
-              </div>
-              <ThemeToggle />
-            </div>
-          </CardContent>
-        </Card>
+      <main className="flex-1 overflow-hidden">
+        <CustomScrollArea
+          className="h-full"
+          viewportClassName="reader-scroll"
+          trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
+        >
+          <div className="container py-6 pb-24 space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>外观</CardTitle>
+                <CardDescription>自定义应用的显示效果</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium">主题</div>
+                    <div className="text-sm text-[hsl(var(--color-muted-foreground))]">切换亮色/暗色模式</div>
+                  </div>
+                  <ThemeToggle />
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>关于</CardTitle>
-            <CardDescription>应用信息</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-[hsl(var(--color-muted-foreground))]">版本</span>
-              <span>1.0.0</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-[hsl(var(--color-muted-foreground))]">数据来源</span>
-              <span className="text-sm">ArknightsGameData</span>
-            </div>
-          </CardContent>
-        </Card>
-        </div>
+            <Card>
+              <CardHeader>
+                <CardTitle>关于</CardTitle>
+                <CardDescription>应用信息</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--color-muted-foreground))]">版本</span>
+                  <span>1.0.0</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[hsl(var(--color-muted-foreground))]">数据来源</span>
+                  <span className="text-sm">ArknightsGameData</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </CustomScrollArea>
       </main>
     </div>
   );

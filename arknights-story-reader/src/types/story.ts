@@ -44,7 +44,11 @@ export interface ParsedStoryContent {
 export type StorySegment = 
   | DialogueSegment
   | NarrationSegment
-  | DecisionSegment;
+  | DecisionSegment
+  | SystemSegment
+  | SubtitleSegment
+  | StickerSegment
+  | HeaderSegment;
 
 // 对话段落
 export interface DialogueSegment {
@@ -65,6 +69,29 @@ export interface DecisionSegment {
   options: string[];
 }
 
+export interface SystemSegment {
+  type: 'system';
+  speaker?: string | null;
+  text: string;
+}
+
+export interface SubtitleSegment {
+  type: 'subtitle';
+  text: string;
+  alignment?: string | null;
+}
+
+export interface StickerSegment {
+  type: 'sticker';
+  text: string;
+  alignment?: string | null;
+}
+
+export interface HeaderSegment {
+  type: 'header';
+  title: string;
+}
+
 // 剧情分类
 export interface StoryCategory {
   id: string;
@@ -80,5 +107,4 @@ export interface SearchResult {
   matchedText: string;
   category: string;
 }
-
 
