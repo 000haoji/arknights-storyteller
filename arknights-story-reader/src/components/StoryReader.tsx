@@ -802,6 +802,26 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                 ? `第 ${currentPage + 1} / ${totalPages} 页`
                 : `已读 ${progressPercentage}%`}
             </div>
+            {storyEntry && (
+              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-[hsl(var(--color-muted-foreground))]">
+                {storyEntry.storyCode && (
+                  <span className="px-1.5 py-0.5 rounded bg-[hsl(var(--color-accent))]">{storyEntry.storyCode}</span>
+                )}
+                {storyEntry.avgTag && (
+                  <span className="px-1.5 py-0.5 rounded bg-[hsl(var(--color-accent))]">{storyEntry.avgTag}</span>
+                )}
+                {storyEntry.unLockType && (
+                  <span>解锁：{storyEntry.unLockType}</span>
+                )}
+                {Array.isArray(storyEntry.requiredStages) && storyEntry.requiredStages.length > 0 && (
+                  <span>
+                    需求：
+                    {storyEntry.requiredStages.slice(0, 2).map((r) => r.stageId).join(" / ")}
+                    {storyEntry.requiredStages.length > 2 ? ' …' : ''}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <Button

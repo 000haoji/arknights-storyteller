@@ -13,13 +13,17 @@ const CATEGORY_TABS = [
   { id: "favorites" as const, label: "收藏" },
   { id: "main" as const, label: "主线剧情" },
   { id: "activity" as const, label: "活动剧情" },
+  { id: "sidestory" as const, label: "支线" },
+  { id: "roguelike" as const, label: "肉鸽" },
   { id: "memory" as const, label: "追忆集" },
 ];
 
-const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "memory", string> = {
+const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "sidestory" | "roguelike" | "memory", string> = {
   favorites: "收藏喜爱的章节或关卡",
   main: "主线章节",
   activity: "活动剧情列表",
+  sidestory: "支线故事",
+  roguelike: "肉鸽模式剧情",
   memory: "干员密录故事",
 };
 
@@ -32,10 +36,16 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'favorites' | 'main' | 'activity' | 'memory'>('main');
+  const [activeCategory, setActiveCategory] = useState<'favorites' | 'main' | 'activity' | 'sidestory' | 'roguelike' | 'memory'>('main');
   const [activityGrouped, setActivityGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
+  const [sidestoryGrouped, setSidestoryGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
+  const [sidestoryLoading, setSidestoryLoading] = useState(false);
+  const [sidestoryLoaded, setSidestoryLoaded] = useState(false);
+  const [roguelikeGrouped, setRoguelikeGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
+  const [roguelikeLoading, setRoguelikeLoading] = useState(false);
+  const [roguelikeLoaded, setRoguelikeLoaded] = useState(false);
   const [memoryStories, setMemoryStories] = useState<StoryEntry[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryLoaded, setMemoryLoaded] = useState(false);
@@ -104,6 +114,8 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
   const mainChapterMap = useMemo(() => new Map(mainGrouped), [mainGrouped]);
   const activityMap = useMemo(() => new Map(activityGrouped), [activityGrouped]);
+  const sidestoryMap = useMemo(() => new Map(sidestoryGrouped), [sidestoryGrouped]);
+  const roguelikeMap = useMemo(() => new Map(roguelikeGrouped), [roguelikeGrouped]);
 
   const filteredMainGrouped = useMemo(() => {
     if (!hasSearch) return mainGrouped;
@@ -132,6 +144,30 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       })
       .filter(([, stories]) => stories.length > 0);
   }, [activityGrouped, hasSearch, matchesSearch, normalizedSearch]);
+
+  const filteredSidestoryGrouped = useMemo(() => {
+    if (!hasSearch) return sidestoryGrouped;
+    return sidestoryGrouped
+      .map(([name, stories]) => {
+        const nameMatches = name.toLowerCase().includes(normalizedSearch);
+        if (nameMatches) return [name, stories] as [string, StoryEntry[]];
+        const filteredStories = stories.filter(matchesSearch);
+        return [name, filteredStories] as [string, StoryEntry[]];
+      })
+      .filter(([, stories]) => stories.length > 0);
+  }, [sidestoryGrouped, hasSearch, matchesSearch, normalizedSearch]);
+
+  const filteredRoguelikeGrouped = useMemo(() => {
+    if (!hasSearch) return roguelikeGrouped;
+    return roguelikeGrouped
+      .map(([name, stories]) => {
+        const nameMatches = name.toLowerCase().includes(normalizedSearch);
+        if (nameMatches) return [name, stories] as [string, StoryEntry[]];
+        const filteredStories = stories.filter(matchesSearch);
+        return [name, filteredStories] as [string, StoryEntry[]];
+      })
+      .filter(([, stories]) => stories.length > 0);
+  }, [roguelikeGrouped, hasSearch, matchesSearch, normalizedSearch]);
 
   const filteredMemoryStories = useMemo(() => {
     if (!hasSearch) return memoryStories;
@@ -342,6 +378,77 @@ export function StoryList({ onSelectStory }: StoryListProps) {
     }
   };
 
+  // 按需加载：切换到对应标签再加载
+  useEffect(() => {
+    if (activeCategory === 'activity') {
+      void loadActivities();
+    } else if (activeCategory === 'sidestory') {
+      void loadSidestories();
+    } else if (activeCategory === 'roguelike') {
+      void loadRoguelike();
+    }
+  }, [activeCategory]);
+
+  const loadSidestories = async () => {
+    if (sidestoryLoaded) return;
+    console.log("[StoryList] 开始加载支线剧情");
+    try {
+      setSidestoryLoading(true);
+      setError(null);
+      const withTimeout = <T,>(p: Promise<T>, ms = 8000) =>
+        new Promise<T>((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+          p.then((v) => { clearTimeout(t); resolve(v); })
+           .catch((e) => { clearTimeout(t); reject(e); });
+        });
+      const grouped = await withTimeout(api.getSidestoryStoriesGrouped());
+      console.log("[StoryList] 支线项目数:", grouped.length);
+      setSidestoryGrouped(grouped);
+      setSidestoryLoaded(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载支线剧情失败:", errorMsg, err);
+      if (errorMsg.includes("NOT_INSTALLED") || errorMsg.includes("No such file") || errorMsg === "TIMEOUT") {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setSidestoryLoading(false);
+    }
+  };
+
+  const loadRoguelike = async () => {
+    if (roguelikeLoaded) return;
+    console.log("[StoryList] 开始加载肉鸽剧情");
+    try {
+      setRoguelikeLoading(true);
+      setError(null);
+      const withTimeout = <T,>(p: Promise<T>, ms = 8000) =>
+        new Promise<T>((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error("TIMEOUT")), ms);
+          p.then((v) => { clearTimeout(t); resolve(v); })
+           .catch((e) => { clearTimeout(t); reject(e); });
+        });
+      const grouped = await withTimeout(api.getRoguelikeStoriesGrouped());
+      console.log("[StoryList] 肉鸽项目数:", grouped.length);
+      setRoguelikeGrouped(grouped);
+      setRoguelikeLoaded(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载肉鸽剧情失败:", errorMsg, err);
+      if (errorMsg.includes("NOT_INSTALLED") || errorMsg.includes("No such file") || errorMsg === "TIMEOUT") {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setRoguelikeLoading(false);
+    }
+  };
+
   const loadMemories = async () => {
     if (memoryLoaded) return;
     console.log("[StoryList] 开始加载追忆集");
@@ -540,6 +647,92 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                               }
                               inactiveText="收藏活动"
                               activeText="取消收藏活动"
+                            />
+                          }
+                        >
+                          {stories.map((story) => (
+                            <StoryItem
+                              key={story.storyId}
+                              story={story}
+                              onSelectStory={onSelectStory}
+                              isFavorite={isFavorite(story.storyId)}
+                              onToggleFavorite={() => toggleFavorite(story)}
+                            />
+                          ))}
+                        </Collapsible>
+                      );
+                    })}
+                </div>
+              )}
+
+              {activeCategory === "sidestory" && (
+                <div className="space-y-3">
+                  {sidestoryLoading && <EmptyState message="支线剧情加载中..." />}
+                  {!sidestoryLoading && filteredSidestoryGrouped.length === 0 && (
+                    <EmptyState message={hasSearch ? "没有匹配的支线剧情" : "暂无支线剧情或需要同步"} />
+                  )}
+                  {!sidestoryLoading &&
+                    filteredSidestoryGrouped.map(([name, stories], index) => {
+                      const fullStories = sidestoryMap.get(name) ?? stories;
+                      const groupKey = fullStories[0]?.storyGroup || name;
+                      const groupId = `sidestory:${groupKey}`;
+                      const fav = isGroupFavorite(groupId);
+                      return (
+                        <Collapsible
+                          key={`sidestory-${index}`}
+                          title={name}
+                          defaultOpen={index === 0}
+                          actions={
+                            <GroupFavoriteButton
+                              isFavorite={fav}
+                              onToggle={() =>
+                                toggleFavoriteGroup({ id: groupId, name, type: "other", stories: fullStories })
+                              }
+                              inactiveText="收藏支线"
+                              activeText="取消收藏支线"
+                            />
+                          }
+                        >
+                          {stories.map((story) => (
+                            <StoryItem
+                              key={story.storyId}
+                              story={story}
+                              onSelectStory={onSelectStory}
+                              isFavorite={isFavorite(story.storyId)}
+                              onToggleFavorite={() => toggleFavorite(story)}
+                            />
+                          ))}
+                        </Collapsible>
+                      );
+                    })}
+                </div>
+              )}
+
+              {activeCategory === "roguelike" && (
+                <div className="space-y-3">
+                  {roguelikeLoading && <EmptyState message="肉鸽剧情加载中..." />}
+                  {!roguelikeLoading && filteredRoguelikeGrouped.length === 0 && (
+                    <EmptyState message={hasSearch ? "没有匹配的肉鸽剧情" : "暂无肉鸽剧情或需要同步"} />
+                  )}
+                  {!roguelikeLoading &&
+                    filteredRoguelikeGrouped.map(([name, stories], index) => {
+                      const fullStories = roguelikeMap.get(name) ?? stories;
+                      const groupKey = fullStories[0]?.storyGroup || name;
+                      const groupId = `roguelike:${groupKey}`;
+                      const fav = isGroupFavorite(groupId);
+                      return (
+                        <Collapsible
+                          key={`roguelike-${index}`}
+                          title={name}
+                          defaultOpen={index === 0}
+                          actions={
+                            <GroupFavoriteButton
+                              isFavorite={fav}
+                              onToggle={() =>
+                                toggleFavoriteGroup({ id: groupId, name, type: "other", stories: fullStories })
+                              }
+                              inactiveText="收藏肉鸽"
+                              activeText="取消收藏肉鸽"
                             />
                           }
                         >

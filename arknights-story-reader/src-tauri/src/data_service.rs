@@ -1901,8 +1901,10 @@ impl DataService {
         let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
 
         for (id, value) in data.iter() {
-            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
-                if et == "SIDESTORY" {
+            let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) else { continue; };
+            let act_type = value.get("actType").and_then(|v| v.as_str()).unwrap_or("");
+            // 支线=大型活动（ACTIVITY + ACTIVITY_STORY）
+            if entry_type == "ACTIVITY" && act_type == "ACTIVITY_STORY" {
                     let group_name = value
                         .get("name")
                         .and_then(|v| v.as_str())
@@ -1920,7 +1922,6 @@ impl DataService {
                             groups.push((group_name.to_string(), stories, id.clone()));
                         }
                     }
-                }
             }
         }
 
@@ -1933,44 +1934,93 @@ impl DataService {
             return Err("NOT_INSTALLED".to_string());
         }
 
-        let story_review_file = self
+        // 首先读取 meta，提取 contentPath -> desc 映射（用于更友好的命名）
+        let meta_file = self
             .data_dir
-            .join("zh_CN/gamedata/excel/story_review_table.json");
+            .join("zh_CN/gamedata/excel/story_review_meta_table.json");
+        let meta_content = fs::read_to_string(&meta_file)
+            .map_err(|e| format!("Failed to read story review meta file: {}", e))?;
+        let meta_value: Value = serde_json::from_str(&meta_content)
+            .map_err(|e| format!("Failed to parse story review meta data: {}", e))?;
 
-        let content = fs::read_to_string(&story_review_file)
-            .map_err(|e| format!("Failed to read story review file: {}", e))?;
-
-        let data: HashMap<String, Value> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
-
-        let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
-
-        for (id, value) in data.iter() {
-            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
-                if et == "ROGUELIKE" {
-                    let group_name = value
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("肉鸽模式");
-
-                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
-                        let mut stories = Vec::new();
-                        for unlock_data in unlock_datas {
-                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
-                                stories.push(story);
+        let mut path_desc_map: HashMap<String, String> = HashMap::new();
+        if let Some(avgs) = meta_value
+            .get("actArchiveData")
+            .and_then(|v| v.get("avgs"))
+            .and_then(|v| v.as_object())
+        {
+            for (_k, v) in avgs.iter() {
+                if let Some(cp) = v.get("contentPath").and_then(|x| x.as_str()) {
+                    let lower = cp.to_ascii_lowercase();
+                    if lower.starts_with("obt/roguelike/") {
+                        if let Some(desc) = v.get("desc").and_then(|x| x.as_str()) {
+                            if !desc.trim().is_empty() {
+                                path_desc_map.insert(lower, desc.to_string());
                             }
-                        }
-                        if !stories.is_empty() {
-                            stories.sort_by_key(|s| s.story_sort);
-                            groups.push((group_name.to_string(), stories, id.clone()));
                         }
                     }
                 }
             }
         }
 
-        groups.sort_by(|a, b| compare_story_group_ids(&a.2, &b.2));
-        Ok(groups.into_iter().map(|(name, stories, _)| (name, stories)).collect())
+        // 使用 story_table 作为权威来源，枚举所有 Obt/Roguelike 文本
+        let story_table_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_table.json");
+        let story_table_content = fs::read_to_string(&story_table_file)
+            .map_err(|e| format!("Failed to read story table file: {}", e))?;
+        let table_obj: HashMap<String, Value> = serde_json::from_str(&story_table_content)
+            .map_err(|e| format!("Failed to parse story table: {}", e))?;
+
+        let mut grouped: HashMap<String, Vec<StoryEntry>> = HashMap::new();
+        let mut counters: HashMap<String, i32> = HashMap::new();
+
+        for (key, _v) in table_obj.into_iter() {
+            let lower = key.to_ascii_lowercase();
+            if !lower.starts_with("obt/roguelike/") {
+                continue;
+            }
+            let group_key = lower
+                .split('/')
+                .nth(2)
+                .map(|s| s.to_uppercase())
+                .unwrap_or_else(|| "ROGUE".to_string());
+            let sort = counters.entry(group_key.clone()).and_modify(|x| *x += 1).or_insert(1);
+            let name = path_desc_map.get(&lower).cloned().unwrap_or_else(|| {
+                // 取最后一段作为兜底标题
+                key.split('/').last().unwrap_or(&key).to_string()
+            });
+
+            let entry = StoryEntry {
+                story_id: key.clone(),
+                story_name: name,
+                story_code: None,
+                story_group: group_key.clone(),
+                story_sort: *sort,
+                avg_tag: None,
+                story_txt: lower.clone(),
+                story_info: None,
+                story_review_type: "ROGUELIKE".to_string(),
+                unlock_type: "NONE".to_string(),
+                story_dependence: None,
+                story_can_show: None,
+                story_can_enter: None,
+                stage_count: None,
+                required_stages: None,
+                cost_item_type: None,
+                cost_item_id: None,
+                cost_item_count: None,
+            };
+
+            grouped.entry(group_key).or_default().push(entry);
+        }
+
+        let mut out: Vec<(String, Vec<StoryEntry>)> = grouped
+            .into_iter()
+            .map(|(name, mut stories)| { stories.sort_by_key(|e| e.story_sort); (name, stories) })
+            .collect();
+        out.sort_by(|a, b| compare_story_group_ids(&a.0, &b.0));
+        Ok(out)
     }
 
     pub fn get_memory_stories(&self) -> Result<Vec<StoryEntry>, String> {

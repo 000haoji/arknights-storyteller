@@ -168,6 +168,14 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
     };
   }, [refreshIndexStatus]);
 
+  useEffect(() => {
+    const handler = () => {
+      void handleBuildIndex();
+    };
+    window.addEventListener("app:rebuild-story-index", handler);
+    return () => window.removeEventListener("app:rebuild-story-index", handler);
+  }, [handleBuildIndex]);
+
   const renderIndexStatusText = () => {
     if (!indexStatus) {
       return "索引状态获取中...";
@@ -255,17 +263,9 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
           )}
           <div className="mt-3 flex flex-wrap items-start gap-3">
             <div className="text-xs text-[hsl(var(--color-muted-foreground))] flex-1 min-w-[12rem]">
-              {renderIndexStatusText()}
+              {buildingIndex ? "索引建立中，请稍候…" : renderIndexStatusText()}
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleBuildIndex}
-                disabled={buildingIndex}
-              >
-                {buildingIndex ? "索引建立中..." : indexStatus?.ready ? "重新建立索引" : "建立全文索引"}
-              </Button>
               <Button
                 variant={debugMode ? "default" : "outline"}
                 size="sm"
@@ -319,7 +319,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
 
       {/* 搜索结果 */}
       <main className="flex-1 overflow-hidden">
-        <CustomScrollArea
+          <CustomScrollArea
           className="h-full"
           viewportClassName="reader-scroll"
           trackOffsetTop="calc(3.5rem + 20px + env(safe-area-inset-top, 0px))"

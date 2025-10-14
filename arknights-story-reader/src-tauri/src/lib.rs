@@ -49,6 +49,8 @@ pub fn run() {
             commands::is_installed,
             commands::get_main_stories_grouped,
             commands::get_activity_stories_grouped,
+            commands::get_sidestory_stories_grouped,
+            commands::get_roguelike_stories_grouped,
             commands::get_memory_stories,
             commands::import_from_zip,
             commands::import_from_zip_bytes,

@@ -1,4 +1,4 @@
-import { ChangeEvent, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
@@ -60,7 +60,7 @@ export function Settings() {
   } = useDataSyncManager({
     active: true,
     onSuccess: () => {
-      setStatusMessage("数据版本信息已更新");
+          setStatusMessage("数据版本信息已更新");
     },
   });
 
@@ -91,6 +91,18 @@ export function Settings() {
     if (!file) return;
     await importFromFile(file);
   };
+
+  const handleRebuildIndex = useCallback(() => {
+    setStatusMessage("已请求重新建立全文索引");
+    setError(null);
+    window.dispatchEvent(new Event("app:rebuild-story-index"));
+  }, []);
+
+  const handleRefreshCharacters = useCallback(() => {
+    setStatusMessage("已请求刷新人物统计");
+    setError(null);
+    window.dispatchEvent(new Event("app:refresh-character-stats"));
+  }, []);
 
   const renderStatusBadge = () => {
     if (status === "not-installed") {
@@ -195,11 +207,11 @@ export function Settings() {
               className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
               style={{ animationDelay: "60ms" }}
             >
-              <CardHeader>
-                <CardTitle>数据管理</CardTitle>
-                <CardDescription>同步或导入剧情数据集</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <CardHeader>
+              <CardTitle>数据管理</CardTitle>
+              <CardDescription>同步或导入剧情数据集</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-4">
                   <div>
                     <div className="text-xs text-[hsl(var(--color-muted-foreground))]">当前版本</div>
@@ -322,8 +334,36 @@ export function Settings() {
                   className="hidden"
                   onChange={handleFileSelected}
                 />
-              </CardContent>
-            </Card>
+            </CardContent>
+          </Card>
+
+          <Card className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500" style={{ animationDelay: "70ms" }}>
+            <CardHeader>
+              <CardTitle>缓存与索引</CardTitle>
+              <CardDescription>统一管理本地索引与人物统计</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2 text-sm text-[hsl(var(--color-muted-foreground))]">
+                <p>
+                  若搜索结果或人物统计与最新数据不符，可在此重新构建相关索引。
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Button
+                  variant="outline"
+                  onClick={handleRebuildIndex}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" /> 重新建立全文索引
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRefreshCharacters}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" /> 刷新人角色统计
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
             <Card className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500" style={{ animationDelay: "80ms" }}>
               <CardHeader>

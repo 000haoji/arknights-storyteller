@@ -166,6 +166,18 @@ export const api = {
     return invoke("get_activity_stories_grouped");
   },
 
+  // 获取支线剧情（按项目分组）
+  getSidestoryStoriesGrouped: async (): Promise<Array<[string, StoryEntry[]]>> => {
+    console.log("[API] 调用 get_sidestory_stories_grouped");
+    return invoke("get_sidestory_stories_grouped");
+  },
+
+  // 获取肉鸽剧情（按项目分组）
+  getRoguelikeStoriesGrouped: async (): Promise<Array<[string, StoryEntry[]]>> => {
+    console.log("[API] 调用 get_roguelike_stories_grouped");
+    return invoke("get_roguelike_stories_grouped");
+  },
+
   // 获取追忆集（干员密录）
   getMemoryStories: async (): Promise<StoryEntry[]> => {
     console.log("[API] 调用 get_memory_stories");

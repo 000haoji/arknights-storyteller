@@ -228,6 +228,16 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     loadAll();
   }, [loadAll]);
 
+  useEffect(() => {
+    const handler = () => {
+      loadAll({ forceRefresh: true }).catch((error) =>
+        console.warn("[CharactersPanel] 刷新统计失败", error)
+      );
+    };
+    window.addEventListener("app:refresh-character-stats", handler);
+    return () => window.removeEventListener("app:refresh-character-stats", handler);
+  }, [loadAll]);
+
   const allCharacters = useMemo(() => {
     return Array.from(aggregates.values())
       .filter((c) => !!c.name && c.name.trim().length > 0)
@@ -278,15 +288,6 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
             <div className="ml-auto w-56">
               <Input placeholder="搜索人物" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-2"
-              onClick={() => loadAll({ forceRefresh: true })}
-              disabled={loading}
-            >
-              <RefreshCw className="h-4 w-4 mr-1" /> 刷新统计
-            </Button>
           </>
         )}
       </header>
