@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/services/api";
-import type { SearchResult, StoryIndexStatus } from "@/types/story";
+import type { SearchResult, StoryEntry, StoryIndexStatus } from "@/types/story";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 interface SearchPanelProps {
-  onSelectResult: (storyId: string) => void;
+  onSelectResult: (story: StoryEntry, focus: { query: string; snippet?: string | null }) => void;
 }
 
 export function SearchPanel({ onSelectResult }: SearchPanelProps) {
@@ -22,6 +22,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
   const [debugMode, setDebugMode] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [debugExpanded, setDebugExpanded] = useState(false);
+  const [openingStoryId, setOpeningStoryId] = useState<string | null>(null);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
@@ -47,6 +48,18 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
     }
   };
 
+  const openResult = async (result: SearchResult) => {
+    try {
+      setOpeningStoryId(result.storyId);
+      const story = await api.getStoryEntry(result.storyId);
+      onSelectResult(story, { query, snippet: result.matchedText });
+    } catch (err) {
+      console.error("Open story failed:", err);
+    } finally {
+      setOpeningStoryId(null);
+    }
+  };
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       handleSearch();
@@ -59,6 +72,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
     setSearched(false);
     setDebugLogs([]);
     setDebugExpanded(false);
+    setOpeningStoryId(null);
   };
 
   const refreshIndexStatus = useCallback(async () => {
@@ -212,14 +226,27 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
                 <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
                   找到 {results.length} 个结果
                 </div>
+                {results.length >= 500 && (
+                  <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                    已达到显示上限（500 条），建议缩小搜索范围以获得更精确的结果
+                  </div>
+                )}
                 {results.map((result, index) => (
                   <button
                     key={`${result.storyId}-${index}`}
-                    onClick={() => onSelectResult(result.storyId)}
-                    className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 text-left hover:-translate-y-0.5 motion-safe:animate-in motion-safe:fade-in-0"
+                    onClick={() => openResult(result)}
+                    disabled={openingStoryId === result.storyId}
+                    className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 text-left hover:-translate-y-0.5 motion-safe:animate-in motion-safe:fade-in-0 disabled:opacity-60 disabled:cursor-wait"
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
-                    <div className="font-medium mb-1">{result.storyName}</div>
+                    <div className="font-medium mb-1">
+                      {result.storyName}
+                      {openingStoryId === result.storyId && (
+                        <span className="ml-2 text-xs text-[hsl(var(--color-muted-foreground))]">
+                          打开中...
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-2">{result.category}</div>
                     {result.matchedText && (
                       <div className="text-sm text-[hsl(var(--color-muted-foreground))] line-clamp-2">

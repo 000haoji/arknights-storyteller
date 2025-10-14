@@ -20,6 +20,7 @@ const REPO_API_URL: &str = "https://api.github.com/repos/Kengxxiao/ArknightsGame
 const REPO_DOWNLOAD_URL: &str = "https://codeload.github.com/Kengxxiao/ArknightsGameData/zip";
 const DEFAULT_BRANCH: &str = "master";
 const VERSION_FILE: &str = "version.json";
+const SEARCH_RESULT_LIMIT: usize = 500;
 
 #[derive(Clone, serde::Serialize)]
 struct SyncProgress {
@@ -1142,16 +1143,19 @@ impl DataService {
             return Ok(Some(Vec::new()));
         };
 
-        let mut stmt = conn
-            .prepare(
-                "
+        let query_sql = format!(
+            "
             SELECT story_id, story_name, category, raw_content
             FROM story_index
             WHERE story_index MATCH ?1
             ORDER BY bm25(story_index)
-            LIMIT 500
+            LIMIT {}
         ",
-            )
+            SEARCH_RESULT_LIMIT
+        );
+
+        let mut stmt = conn
+            .prepare(&query_sql)
             .map_err(|e| format!("Failed to prepare story index query: {}", e))?;
 
         let rows = stmt
@@ -1207,6 +1211,9 @@ impl DataService {
                     matched_text: story.story_name.clone(),
                     category: category_label,
                 });
+                if results.len() >= SEARCH_RESULT_LIMIT {
+                    return Ok(results);
+                }
                 continue;
             }
 
@@ -1219,6 +1226,9 @@ impl DataService {
                         matched_text,
                         category: category_label,
                     });
+                    if results.len() >= SEARCH_RESULT_LIMIT {
+                        return Ok(results);
+                    }
                 }
             }
         }
@@ -1275,6 +1285,12 @@ impl DataService {
                 if results.is_empty() {
                     logs.push("索引结果为空，转为线性扫描".to_string());
                 } else {
+                    if results.len() >= SEARCH_RESULT_LIMIT {
+                        logs.push(format!(
+                            "结果数量达到上限 {} 条，已截断",
+                            SEARCH_RESULT_LIMIT
+                        ));
+                    }
                     logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
                     return Ok(SearchDebugResponse { results, logs });
                 }
@@ -1301,6 +1317,12 @@ impl DataService {
             fallback_start.elapsed().as_millis(),
             fallback_results.len()
         ));
+        if fallback_results.len() >= SEARCH_RESULT_LIMIT {
+            logs.push(format!(
+                "结果数量达到上限 {} 条，建议缩小检索范围",
+                SEARCH_RESULT_LIMIT
+            ));
+        }
         logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
 
         Ok(SearchDebugResponse {

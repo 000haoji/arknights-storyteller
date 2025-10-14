@@ -10,24 +10,34 @@ import { FavoritesProvider } from "@/hooks/useFavorites";
 
 type Tab = "stories" | "search" | "settings";
 
+interface ReaderFocus {
+  storyId: string;
+  query: string;
+  snippet?: string | null;
+  issuedAt: number;
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("stories");
   const [selectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
+  const [readerFocus, setReaderFocus] = useState<ReaderFocus | null>(null);
 
   const handleSelectStory = (story: StoryEntry) => {
     console.log("[App] 选择剧情:", story.storyName);
     setSelectedStory(story);
+    setReaderFocus(null);
   };
 
   const handleBackToList = () => {
     console.log("[App] 返回剧情列表");
     setSelectedStory(null);
+    setReaderFocus(null);
   };
 
-  const handleSearchResult = (storyId: string) => {
-    console.log("[App] 搜索结果选择，storyId:", storyId);
-    // This would ideally fetch the story by ID and set it
-    // For now, we'll just switch to stories tab
+  const handleSearchResult = (story: StoryEntry, focus: { query: string; snippet?: string | null }) => {
+    console.log("[App] 搜索结果选择，storyId:", story.storyId);
+    setSelectedStory(story);
+    setReaderFocus({ storyId: story.storyId, query: focus.query, snippet: focus.snippet, issuedAt: Date.now() });
     setActiveTab("stories");
   };
 
@@ -37,6 +47,10 @@ function App() {
     <StoryReader
       storyPath={selectedStory.storyTxt}
       storyName={selectedStory.storyName}
+      storyId={selectedStory.storyId}
+      initialFocus={
+        readerFocus && readerFocus.storyId === selectedStory.storyId ? readerFocus : null
+      }
       onBack={handleBackToList}
     />
   ) : (

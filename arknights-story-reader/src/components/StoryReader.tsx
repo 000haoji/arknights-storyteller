@@ -17,24 +17,30 @@ import {
   ChevronLeft,
   ChevronRight,
   ListTree,
-  Maximize2,
-  Minimize2,
   Settings as SettingsIcon,
   Trash2,
 } from "lucide-react";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { ReaderSettingsPanel } from "@/components/ReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
-import { useFullscreen } from "@/hooks/useFullscreen";
 import { useHighlights } from "@/hooks/useHighlights";
 import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+interface ReaderSearchFocus {
+  storyId: string;
+  query: string;
+  snippet?: string | null;
+  issuedAt?: number;
+}
+
 interface StoryReaderProps {
+  storyId: string;
   storyPath: string;
   storyName: string;
   onBack: () => void;
+  initialFocus?: ReaderSearchFocus | null;
 }
 
 interface RenderableSegment {
@@ -58,7 +64,7 @@ function isSegmentHighlightable(segment: StorySegment): boolean {
   }
 }
 
-export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) {
+export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocus }: StoryReaderProps) {
   const [content, setContent] = useState<ParsedStoryContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,14 +72,15 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [progressValue, setProgressValue] = useState(0);
+  const [highlightSegmentIndex, setHighlightSegmentIndex] = useState<number | null>(null);
   const [bookmarkMode, setBookmarkMode] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
+  const focusAppliedRef = useRef<number | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
 
   const processedSegments = useMemo<StorySegment[]>(() => {
@@ -210,6 +217,75 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
     ));
   }, []);
 
+  const getSegmentSearchText = useCallback((segment: StorySegment) => {
+    switch (segment.type) {
+      case "dialogue":
+        return `${segment.characterName} ${segment.text}`;
+      case "narration":
+      case "subtitle":
+      case "sticker":
+        return segment.text;
+      case "system":
+        return segment.speaker ? `${segment.speaker} ${segment.text}` : segment.text;
+      case "decision":
+        return segment.options.join(" ");
+      default:
+        return "";
+    }
+  }, []);
+
+  const findFocusSegmentIndex = useCallback(
+    (focus: ReaderSearchFocus): number | null => {
+      const normalizedQuery = focus.query.trim().toLowerCase();
+      const normalizedSnippet = focus.snippet
+        ?.replace(/…/g, " ")
+        .replace(/\.{3}/g, " ")
+        .trim()
+        .toLowerCase();
+
+      if (!normalizedQuery && !normalizedSnippet) {
+        return null;
+      }
+
+      for (let i = 0; i < processedSegments.length; i += 1) {
+        const segment = processedSegments[i];
+        const text = getSegmentSearchText(segment);
+        if (!text) continue;
+        const normalizedText = text.replace(/\s+/g, " ").toLowerCase();
+
+        if (normalizedSnippet && normalizedText.includes(normalizedSnippet)) {
+          return i;
+        }
+
+        if (normalizedQuery && normalizedText.includes(normalizedQuery)) {
+          return i;
+        }
+      }
+
+      return null;
+    },
+    [getSegmentSearchText, processedSegments]
+  );
+
+  const scrollToSegment = useCallback(
+    (segmentIndex: number, behavior: ScrollBehavior = "smooth") => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const element = container.querySelector<HTMLElement>(
+        `[data-segment-index="${segmentIndex}"]`
+      );
+      if (!element) return;
+
+      if (settings.readingMode === "scroll") {
+        const offset = Math.max(element.offsetTop - 32, 0);
+        container.scrollTo({ top: offset, behavior });
+      } else {
+        element.scrollIntoView({ behavior, block: "start" });
+      }
+    },
+    [settings.readingMode]
+  );
+
   const renderableSegments = useMemo<RenderableSegment[]>(() => {
     if (!processedSegments.length) return [];
     if (settings.readingMode === "paged") {
@@ -269,6 +345,11 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   useEffect(() => {
     loadStory();
   }, [loadStory]);
+
+  useEffect(() => {
+    setHighlightSegmentIndex(null);
+    focusAppliedRef.current = null;
+  }, [storyId, storyPath]);
 
   useLayoutEffect(() => {
     if (!processedSegments.length) return;
@@ -363,30 +444,73 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
     return () => window.removeEventListener("keydown", handleKey);
   }, [settings.readingMode, totalPages]);
 
+  useEffect(() => {
+    if (!initialFocus || !processedSegments.length) return;
+    const token = initialFocus.issuedAt ?? Date.now();
+    if (focusAppliedRef.current === token && highlightSegmentIndex !== null) {
+      return;
+    }
+
+    const targetIndex = findFocusSegmentIndex(initialFocus);
+    if (targetIndex === null) {
+      focusAppliedRef.current = token;
+      setHighlightSegmentIndex(null);
+      return;
+    }
+
+    const applyFocus = () => {
+      setHighlightSegmentIndex(targetIndex);
+      scrollToSegment(targetIndex);
+      focusAppliedRef.current = token;
+    };
+
+    if (settings.readingMode === "paged") {
+      const targetPage = Math.min(Math.floor(targetIndex / SEGMENTS_PER_PAGE), totalPages - 1);
+      if (targetPage !== currentPage) {
+        setCurrentPage(targetPage);
+        setTimeout(() => applyFocus(), 120);
+      } else {
+        setTimeout(() => applyFocus(), 16);
+      }
+    } else {
+      setTimeout(() => applyFocus(), 16);
+    }
+  }, [
+    initialFocus,
+    processedSegments,
+    findFocusSegmentIndex,
+    scrollToSegment,
+    settings.readingMode,
+    currentPage,
+    totalPages,
+    highlightSegmentIndex,
+  ]);
+
   const handleJumpToSegment = useCallback(
     (index: number) => {
       if (!processedSegments.length) return;
 
+      setHighlightSegmentIndex(index);
       if (settings.readingMode === "scroll") {
-        const el = document.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        scrollToSegment(index);
       } else {
         const targetPage = Math.min(Math.floor(index / SEGMENTS_PER_PAGE), totalPages - 1);
         setCurrentPage(targetPage);
+        setTimeout(() => scrollToSegment(index), 120);
       }
 
       setInsightsOpen(false);
     },
-    [processedSegments, settings.readingMode, totalPages]
+    [processedSegments, scrollToSegment, settings.readingMode, totalPages]
   );
 
   const renderSegment = useCallback(
     ({ segment, index }: RenderableSegment, isLast: boolean) => {
       const spacing = isLast ? "0" : readerSpacing;
       const highlightable = isSegmentHighlightable(segment);
-      const highlighted = highlightable ? isHighlighted(index) : false;
+      const annotationHighlight = highlightable ? isHighlighted(index) : false;
+      const searchHighlighted = highlightSegmentIndex === index;
+      const highlighted = annotationHighlight || searchHighlighted;
       const showHighlightButton = highlightable && bookmarkMode;
 
       const segmentStyle: CSSProperties = { marginBottom: spacing };
@@ -397,7 +521,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       const highlightButton = showHighlightButton ? (
         <button
           type="button"
-          className={cn("reader-highlight-toggle", highlighted && "is-active")}
+          className={cn("reader-highlight-toggle", annotationHighlight && "is-active")}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -416,15 +540,16 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             data-segment-index={index}
             className={cn(
               "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              highlighted && "reader-highlighted"
+              annotationHighlight && "reader-highlighted",
+              searchHighlighted && "reader-search-highlight"
             )}
-            style={segmentStyle}
-          >
-            {highlightButton}
-            <div className="reader-character-name">{segment.characterName}</div>
-            <div className="reader-text">{renderLines(segment.text)}</div>
-          </div>
-        );
+          style={segmentStyle}
+        >
+          {highlightButton}
+          <div className="reader-character-name">{segment.characterName}</div>
+          <div className="reader-text">{renderLines(segment.text)}</div>
+        </div>
+      );
       }
 
       if (segment.type === "narration") {
@@ -434,7 +559,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             data-segment-index={index}
             className={cn(
               "reader-narration reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              highlighted && "reader-highlighted"
+              annotationHighlight && "reader-highlighted",
+              searchHighlighted && "reader-search-highlight"
             )}
             style={segmentStyle}
           >
@@ -449,7 +575,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-decision motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-decision motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              searchHighlighted && "reader-search-highlight"
+            )}
             style={{ marginBottom: spacing }}
           >
             <div className="reader-decision-title">选择：</div>
@@ -474,7 +603,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             data-segment-index={index}
             className={cn(
               "reader-system reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              highlighted && "reader-highlighted"
+              annotationHighlight && "reader-highlighted",
+              searchHighlighted && "reader-search-highlight"
             )}
             style={segmentStyle}
           >
@@ -500,7 +630,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             data-segment-index={index}
             className={cn(
               "reader-subtitle reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              highlighted && "reader-highlighted"
+              annotationHighlight && "reader-highlighted",
+              searchHighlighted && "reader-search-highlight"
             )}
             style={{ ...segmentStyle, textAlign: alignment }}
           >
@@ -523,7 +654,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             data-segment-index={index}
             className={cn(
               "reader-sticker reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              highlighted && "reader-highlighted"
+              annotationHighlight && "reader-highlighted",
+              searchHighlighted && "reader-search-highlight"
             )}
             style={{ ...segmentStyle, textAlign: alignment }}
           >
@@ -548,7 +680,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       return null;
     },
-    [bookmarkMode, isHighlighted, readerSpacing, renderLines, toggleHighlight]
+    [bookmarkMode, highlightSegmentIndex, isHighlighted, readerSpacing, renderLines, toggleHighlight]
   );
 
   if (loading) {
@@ -622,14 +754,6 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               className={cn(bookmarkMode && "text-[hsl(var(--color-primary))]")}
             >
               {bookmarkMode ? <BookmarkCheck className="h-5 w-5" /> : <BookmarkPlus className="h-5 w-5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => toggleFullscreen(readerRootRef.current ?? undefined)}
-              aria-label={isFullscreen ? "退出全屏" : "进入全屏"}
-            >
-              {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
             </Button>
             <Button
               variant="ghost"

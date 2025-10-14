@@ -369,6 +369,21 @@ body {
   border-radius: 0.9rem;
 }
 
+.reader-search-highlight {
+  position: relative;
+  box-shadow: 0 0 0 2px hsl(var(--color-primary) / 0.45);
+}
+
+.reader-search-highlight::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: linear-gradient(120deg, hsl(var(--color-primary) / 0.2), transparent 60%);
+  pointer-events: none;
+  z-index: -1;
+}
+
 .reader-subtitle {
   margin-bottom: 1.5rem;
   font-style: italic;

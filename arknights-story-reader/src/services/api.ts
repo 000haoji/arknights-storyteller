@@ -117,6 +117,11 @@ export const api = {
     return invoke("get_story_info", { infoPath });
   },
 
+  // 根据ID获取剧情条目
+  getStoryEntry: async (storyId: string): Promise<StoryEntry> => {
+    return invoke("get_story_entry", { storyId });
+  },
+
   // 获取全文索引状态
   getStoryIndexStatus: async (): Promise<StoryIndexStatus> => {
     return invoke("get_story_index_status");
