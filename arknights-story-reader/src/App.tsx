@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { StoryList } from "@/components/StoryList";
 import { StoryReader } from "@/components/StoryReader";
@@ -7,6 +7,7 @@ import { Settings } from "@/components/Settings";
 import { BottomNav } from "@/components/BottomNav";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
+import { KeepAlive } from "@/components/KeepAlive";
 
 type Tab = "stories" | "search" | "settings";
 
@@ -19,48 +20,103 @@ interface ReaderFocus {
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>("stories");
-  const [selectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
+  const [readerVisible, setReaderVisible] = useState(false);
+  const [readerStory, setReaderStory] = useState<StoryEntry | null>(null);
   const [readerFocus, setReaderFocus] = useState<ReaderFocus | null>(null);
 
-  const handleSelectStory = (story: StoryEntry) => {
+  const readerActive = readerVisible && readerStory !== null;
+
+  const handleSelectStory = useCallback((story: StoryEntry) => {
     console.log("[App] 选择剧情:", story.storyName);
-    setSelectedStory(story);
+    setReaderStory(story);
     setReaderFocus(null);
-  };
-
-  const handleBackToList = () => {
-    console.log("[App] 返回剧情列表");
-    setSelectedStory(null);
-    setReaderFocus(null);
-  };
-
-  const handleSearchResult = (story: StoryEntry, focus: { query: string; snippet?: string | null }) => {
-    console.log("[App] 搜索结果选择，storyId:", story.storyId);
-    setSelectedStory(story);
-    setReaderFocus({ storyId: story.storyId, query: focus.query, snippet: focus.snippet, issuedAt: Date.now() });
+    setReaderVisible(true);
     setActiveTab("stories");
-  };
+  }, []);
 
-  console.log("[App] 当前状态 - activeTab:", activeTab, "selectedStory:", selectedStory?.storyName || null);
+  const handleBackToList = useCallback(() => {
+    console.log("[App] 返回剧情列表");
+    setReaderVisible(false);
+    setActiveTab("stories");
+  }, []);
 
-  const appContent = selectedStory ? (
+  const handleSearchResult = useCallback(
+    (story: StoryEntry, focus: { query: string; snippet?: string | null }) => {
+      console.log("[App] 搜索结果选择，storyId:", story.storyId);
+      setReaderStory(story);
+      setReaderFocus({
+        storyId: story.storyId,
+        query: focus.query,
+        snippet: focus.snippet,
+        issuedAt: Date.now(),
+      });
+      setReaderVisible(true);
+      setActiveTab("stories");
+    },
+    []
+  );
+
+  const handleTabChange = useCallback(
+    (tab: Tab) => {
+      if (readerActive) {
+        setReaderVisible(false);
+      }
+      setActiveTab(tab);
+    },
+    [readerActive]
+  );
+
+  const storyListView = useMemo(
+    () => <StoryList onSelectStory={handleSelectStory} />,
+    [handleSelectStory]
+  );
+  const searchView = useMemo(
+    () => <SearchPanel onSelectResult={handleSearchResult} />,
+    [handleSearchResult]
+  );
+  const settingsView = useMemo(() => <Settings />, []);
+
+  const readerView = readerStory ? (
     <StoryReader
-      storyPath={selectedStory.storyTxt}
-      storyName={selectedStory.storyName}
-      storyId={selectedStory.storyId}
+      key={readerStory.storyId}
+      storyPath={readerStory.storyTxt}
+      storyName={readerStory.storyName}
+      storyId={readerStory.storyId}
       initialFocus={
-        readerFocus && readerFocus.storyId === selectedStory.storyId ? readerFocus : null
+        readerFocus && readerFocus.storyId === readerStory.storyId ? readerFocus : null
       }
       onBack={handleBackToList}
     />
-  ) : (
+  ) : null;
+
+  console.log(
+    "[App] 当前状态 - activeTab:",
+    activeTab,
+    "readerVisible:",
+    readerVisible,
+    "readerStory:",
+    readerStory?.storyName ?? null
+  );
+
+  const appContent = (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex-1 overflow-hidden">
-        {activeTab === "stories" && <StoryList onSelectStory={handleSelectStory} />}
-        {activeTab === "search" && <SearchPanel onSelectResult={handleSearchResult} />}
-        {activeTab === "settings" && <Settings />}
+      <div className="relative flex-1 overflow-hidden">
+        <KeepAlive active={!readerActive && activeTab === "stories"} className="absolute inset-0">
+          {storyListView}
+        </KeepAlive>
+        <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
+          {searchView}
+        </KeepAlive>
+        <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
+          {settingsView}
+        </KeepAlive>
+        {readerStory && (
+          <KeepAlive active={readerActive} className="absolute inset-0">
+            {readerView}
+          </KeepAlive>
+        )}
       </div>
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      {!readerActive && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}
     </div>
   );
 
@@ -72,3 +128,4 @@ function App() {
 }
 
 export default App;
+

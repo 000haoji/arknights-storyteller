@@ -11,9 +11,20 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder.plugin(tauri_plugin_opener::init());
+        builder = builder.plugin(tauri_plugin_dialog::init());
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        builder = builder;
+    }
+
+    builder
         .setup(|app| {
             let app_data_dir = app
                 .path()

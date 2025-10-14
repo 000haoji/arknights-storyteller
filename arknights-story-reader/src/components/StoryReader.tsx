@@ -507,6 +507,11 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     [activeCharacter, jumpToSegment]
   );
 
+  const clearCharacterHighlight = useCallback(() => {
+    setActiveCharacter(null);
+    setHighlightSegmentIndex(null);
+  }, []);
+
   const handleJumpToSegment = useCallback(
     (index: number) => {
       jumpToSegment(index, { highlightSearch: false });
@@ -917,9 +922,21 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                       </section>
 
                       <section>
-                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
-                          角色出场
-                        </h3>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))]">
+                            角色出场
+                          </h3>
+                          {activeCharacter && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-auto px-2 py-1 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-destructive))]"
+                              onClick={clearCharacterHighlight}
+                            >
+                              清除高亮
+                            </Button>
+                          )}
+                        </div>
                         <div className="space-y-2">
                           {insights.characters.length === 0 && (
                             <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
