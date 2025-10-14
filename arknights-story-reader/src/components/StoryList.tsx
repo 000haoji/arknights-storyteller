@@ -4,18 +4,19 @@ import type { StoryEntry } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { BookOpen, RefreshCw } from "lucide-react";
 import { SyncDialog } from "@/components/SyncDialog";
+import { Collapsible } from "@/components/ui/collapsible";
 
 interface StoryListProps {
   onSelectStory: (story: StoryEntry) => void;
 }
 
 export function StoryList({ onSelectStory }: StoryListProps) {
-  const [mainStories, setMainStories] = useState<StoryEntry[]>([]);
+  const [mainGrouped, setMainGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<'main' | 'activity' | 'memory'>('main');
-  const [activityStories, setActivityStories] = useState<StoryEntry[]>([]);
+  const [activityGrouped, setActivityGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
   const [memoryStories, setMemoryStories] = useState<StoryEntry[]>([]);
@@ -70,26 +71,13 @@ export function StoryList({ onSelectStory }: StoryListProps) {
            .catch((e) => { clearTimeout(t); reject(e); });
         });
 
-      const categories = await withTimeout(api.getStoryCategories());
-      console.log("[StoryList] 获取到的分类数:", categories.length);
-      console.log("[StoryList] 分类详情:", categories.map(c => ({ 
-        id: c.id, 
-        name: c.name, 
-        type: c.type,
-        storyCount: c.stories.length 
+      const grouped = await withTimeout(api.getMainStoriesGrouped());
+      console.log("[StoryList] 主线章节数:", grouped.length);
+      console.log("[StoryList] 前3个章节:", grouped.slice(0, 3).map(([name, stories]) => ({
+        name,
+        storyCount: stories.length
       })));
-      
-      const mainCategory = categories.find((c) => c.type === "chapter");
-      console.log("[StoryList] mainCategory:", mainCategory ? { 
-        id: mainCategory.id, 
-        name: mainCategory.name, 
-        storyCount: mainCategory.stories.length 
-      } : null);
-      
-      const stories = mainCategory?.stories ?? [];
-      console.log("[StoryList] 主线剧情加载完成 数量:", stories.length);
-      console.log("[StoryList] 前3个故事:", stories.slice(0, 3).map(s => s.storyName));
-      setMainStories(stories);
+      setMainGrouped(grouped);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "加载失败";
       console.error("[StoryList] 加载主线剧情失败:", errorMsg, err);
@@ -123,9 +111,13 @@ export function StoryList({ onSelectStory }: StoryListProps) {
            .catch((e) => { clearTimeout(t); reject(e); });
         });
 
-      const data = await withTimeout(api.getActivityStories());
-      console.log("[StoryList] 活动剧情加载成功，数量:", data.length);
-      setActivityStories(data);
+      const grouped = await withTimeout(api.getActivityStoriesGrouped());
+      console.log("[StoryList] 活动数:", grouped.length);
+      console.log("[StoryList] 前3个活动:", grouped.slice(0, 3).map(([name, stories]) => ({
+        name,
+        storyCount: stories.length
+      })));
+      setActivityGrouped(grouped);
       setActivityLoaded(true);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "加载失败";
@@ -231,8 +223,8 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       </header>
 
       {/* 分类列表 */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="container py-6 space-y-6">
+      <main className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="container py-6 pb-20 space-y-6">
         <div className="grid gap-4">
           <CategoryCard
             title="主线剧情"
@@ -266,9 +258,13 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
         <div className="mt-4 space-y-4">
           {activeCategory === 'main' && (
-            mainStories.length > 0 ? (
-              mainStories.map((story) => (
-                <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+            mainGrouped.length > 0 ? (
+              mainGrouped.map(([chapterName, stories], index) => (
+                <Collapsible key={`chapter-${index}`} title={chapterName} defaultOpen={index === 0}>
+                  {stories.map((story) => (
+                    <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+                  ))}
+                </Collapsible>
               ))
             ) : (
               <EmptyState message="暂无主线剧情，可能需要同步。" />
@@ -276,15 +272,19 @@ export function StoryList({ onSelectStory }: StoryListProps) {
           )}
 
           {activeCategory === 'activity' && (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {activityLoading && (
                 <EmptyState message="活动剧情加载中..." />
               )}
-              {!activityLoading && activityStories.length === 0 && (
+              {!activityLoading && activityGrouped.length === 0 && (
                 <EmptyState message="暂无活动剧情或需要同步" />
               )}
-              {!activityLoading && activityStories.map((story) => (
-                <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+              {!activityLoading && activityGrouped.map(([activityName, stories], index) => (
+                <Collapsible key={`activity-${index}`} title={activityName} defaultOpen={index === 0}>
+                  {stories.map((story) => (
+                    <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+                  ))}
+                </Collapsible>
               ))}
             </div>
           )}
@@ -373,4 +373,3 @@ function StoryItem({
 function EmptyState({ message }: { message: string }) {
   return <div className="text-[hsl(var(--color-muted-foreground))]">{message}</div>;
 }
-

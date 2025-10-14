@@ -126,10 +126,10 @@ export const api = {
     return invoke("get_main_stories_grouped");
   },
 
-  // 获取活动剧情
-  getActivityStories: async (): Promise<StoryEntry[]> => {
-    console.log("[API] 调用 get_activity_stories");
-    return invoke("get_activity_stories");
+  // 获取活动剧情（按活动分组）
+  getActivityStoriesGrouped: async (): Promise<Array<[string, StoryEntry[]]>> => {
+    console.log("[API] 调用 get_activity_stories_grouped");
+    return invoke("get_activity_stories_grouped");
   },
 
   // 获取追忆集（干员密录）

@@ -5,6 +5,11 @@ export interface ReaderSettings {
   fontSize: number;
   lineHeight: number;
   letterSpacing: number;
+  paragraphSpacing: number; // 段落间距
+  pageWidth: number; // 页面宽度（百分比）
+  textAlign: 'left' | 'justify'; // 文本对齐方式
+  theme: 'default' | 'sepia' | 'green' | 'dark'; // 阅读主题
+  readingMode: 'paged' | 'scroll'; // 阅读模式：分页/滚动
 }
 
 const DEFAULT_SETTINGS: ReaderSettings = {
@@ -12,6 +17,11 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 18,
   lineHeight: 2,
   letterSpacing: 0,
+  paragraphSpacing: 2, // rem
+  pageWidth: 100, // 100%
+  textAlign: 'justify',
+  theme: 'default',
+  readingMode: 'paged',
 };
 
 const STORAGE_KEY = "reader-settings";

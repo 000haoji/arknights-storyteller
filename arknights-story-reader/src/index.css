@@ -160,7 +160,40 @@ input[type="range"]::-moz-range-thumb {
   touch-action: pan-y;
 }
 
+/* 自定义滚动条以匹配主题色调 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--color-primary) / 0.6) hsl(var(--color-secondary) / 0.3);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--color-secondary) / 0.25);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--color-primary));
+  border-radius: 9999px;
+  border: 2px solid hsl(var(--color-secondary) / 0.2);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--color-primary) / 0.85);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--color-secondary) / 0.35);
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--color-primary) / 0.9);
+  border-color: hsl(var(--color-background));
+}
+
 .touch-action-none {
   touch-action: none;
 }
-

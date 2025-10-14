@@ -74,8 +74,8 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
       </header>
 
       {/* 搜索结果 */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="container py-6">
+      <main className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="container py-6 pb-20">
         {searching && (
           <div className="text-center text-[hsl(var(--color-muted-foreground))]">搜索中...</div>
         )}
@@ -117,4 +117,3 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
     </div>
   );
 }
-

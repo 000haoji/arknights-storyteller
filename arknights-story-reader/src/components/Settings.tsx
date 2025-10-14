@@ -10,8 +10,8 @@ export function Settings() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="container py-6 space-y-6">
+      <main className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="container py-6 pb-20 space-y-6">
         <Card>
           <CardHeader>
             <CardTitle>外观</CardTitle>
@@ -49,4 +49,3 @@ export function Settings() {
     </div>
   );
 }
-
