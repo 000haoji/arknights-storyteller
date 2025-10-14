@@ -526,23 +526,66 @@ impl DataService {
         Ok(activities)
     }
 
-    /// 获取分类的剧情列表
+    /// 获取分类的剧情列表（仅返回分类，不含故事列表）
     pub fn get_story_categories(&self) -> Result<Vec<StoryCategory>, String> {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
+        
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
         let mut categories = Vec::new();
 
-        // 仅返回主线分类，活动分类改为懒加载，避免初次解析大文件卡顿
-        let main_stories = self.get_main_stories()?;
-        categories.push(StoryCategory {
-            id: "main".to_string(),
-            name: "主线剧情".to_string(),
-            category_type: "chapter".to_string(),
-            stories: main_stories,
-        });
+        // 主线剧情
+        let main_stories = self.parse_stories_by_entry_type(&data, "MAINLINE")?;
+        if !main_stories.is_empty() {
+            categories.push(StoryCategory {
+                id: "mainline".to_string(),
+                name: "主线剧情".to_string(),
+                category_type: "chapter".to_string(),
+                stories: main_stories,
+            });
+        }
 
         Ok(categories)
+    }
+
+    /// 根据 entryType 解析剧情
+    fn parse_stories_by_entry_type(
+        &self,
+        data: &HashMap<String, Value>,
+        entry_type: &str,
+    ) -> Result<Vec<StoryEntry>, String> {
+        let mut stories = Vec::new();
+
+        for (_id, value) in data.iter() {
+            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
+                if et == entry_type {
+                    if let Some(unlock_datas) =
+                        value.get("infoUnlockDatas").and_then(|v| v.as_array())
+                    {
+                        for unlock_data in unlock_datas {
+                            if let Ok(story) =
+                                serde_json::from_value::<StoryEntry>(unlock_data.clone())
+                            {
+                                stories.push(story);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stories.sort_by_key(|s| s.story_sort);
+        Ok(stories)
     }
 
     /// 获取主线剧情
@@ -561,7 +604,7 @@ impl DataService {
 
         for (_id, value) in data.iter() {
             if let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) {
-                if entry_type == "MAIN_STORY" {
+                if entry_type == "MAINLINE" {
                     if let Some(unlock_datas) =
                         value.get("infoUnlockDatas").and_then(|v| v.as_array())
                     {
@@ -656,14 +699,42 @@ impl DataService {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
-        let activities = self.get_activities()?;
-        let mut stories = Vec::new();
-        for activity in activities {
-            for story in activity.info_unlock_datas {
-                stories.push(story);
-            }
+        
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let mut activity_stories = self.parse_stories_by_entry_type(&data, "ACTIVITY")?;
+        let mini_activity_stories = self.parse_stories_by_entry_type(&data, "MINI_ACTIVITY")?;
+        
+        activity_stories.extend(mini_activity_stories);
+        activity_stories.sort_by_key(|s| s.story_sort);
+        
+        Ok(activity_stories)
+    }
+
+    pub fn get_memory_stories(&self) -> Result<Vec<StoryEntry>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
         }
-        stories.sort_by_key(|s| s.story_sort);
+        
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let stories = self.parse_stories_by_entry_type(&data, "NONE")?;
         Ok(stories)
     }
 }

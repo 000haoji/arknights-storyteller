@@ -125,5 +125,11 @@ export const api = {
     console.log("[API] 调用 get_activity_stories");
     return invoke("get_activity_stories");
   },
+
+  // 获取追忆集（干员密录）
+  getMemoryStories: async (): Promise<StoryEntry[]> => {
+    console.log("[API] 调用 get_memory_stories");
+    return invoke("get_memory_stories");
+  },
 };
 

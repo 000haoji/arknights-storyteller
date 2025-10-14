@@ -116,3 +116,11 @@ pub async fn get_activity_stories(state: State<'_, AppState>) -> Result<Vec<Stor
         .await
         .map_err(|err| format!("Failed to join activity stories task: {}", err))?
 }
+
+#[tauri::command]
+pub async fn get_memory_stories(state: State<'_, AppState>) -> Result<Vec<StoryEntry>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_memory_stories())
+        .await
+        .map_err(|err| format!("Failed to join memory stories task: {}", err))?
+}
