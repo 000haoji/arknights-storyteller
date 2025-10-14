@@ -195,6 +195,26 @@ pub async fn get_activity_stories_grouped(
 }
 
 #[tauri::command]
+pub async fn get_sidestory_stories_grouped(
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_sidestory_stories_grouped())
+        .await
+        .map_err(|err| format!("Failed to join sidestory stories grouped task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_roguelike_stories_grouped(
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_roguelike_stories_grouped())
+        .await
+        .map_err(|err| format!("Failed to join roguelike stories grouped task: {}", err))?
+}
+
+#[tauri::command]
 pub async fn get_memory_stories(state: State<'_, AppState>) -> Result<Vec<StoryEntry>, String> {
     let service = clone_service(&state);
     tauri::async_runtime::spawn_blocking(move || service.get_memory_stories())

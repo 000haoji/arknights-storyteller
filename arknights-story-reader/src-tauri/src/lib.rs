@@ -60,6 +60,7 @@ pub fn run() {
             commands::get_story_index_status,
             commands::build_story_index,
             commands::search_stories,
+            commands::search_stories_with_progress,
             commands::search_stories_debug,
         ])
         .run(tauri::generate_context!())

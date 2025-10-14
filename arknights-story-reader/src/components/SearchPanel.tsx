@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/services/api";
 import type { SearchResult, StoryEntry, StoryIndexStatus } from "@/types/story";
 import { Input } from "@/components/ui/input";
@@ -23,28 +23,76 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [debugExpanded, setDebugExpanded] = useState(false);
   const [openingStoryId, setOpeningStoryId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ phase: string; current: number; total: number; message: string } | null>(null);
+  const progressUnlistenRef = useRef<null | (() => void)>(null);
+  const [history, setHistory] = useState<string[]>([]);
+  const [cache, setCache] = useState<Record<string, { results: SearchResult[]; updatedAt: number }>>({});
+  const [fromCache, setFromCache] = useState<{ used: boolean; updatedAt?: number }>({ used: false });
 
-  const handleSearch = async () => {
+  const saveHistory = useCallback((q: string) => {
+    const key = "arknights-story-search-history";
+    const prevRaw = localStorage.getItem(key);
+    const prev: string[] = prevRaw ? JSON.parse(prevRaw) : [];
+    const next = [q, ...prev.filter((s) => s !== q)].slice(0, 10);
+    localStorage.setItem(key, JSON.stringify(next));
+    setHistory(next);
+  }, []);
+
+  const handleSearch = async (opts?: { forceRefresh?: boolean }) => {
     if (!query.trim()) return;
 
     try {
       setSearching(true);
+      setProgress({ phase: "准备", current: 0, total: 1, message: "" });
+      // 监听进度
+      if (!progressUnlistenRef.current) {
+        const unlisten = await api.onSearchProgress((p) => setProgress(p));
+        progressUnlistenRef.current = () => {
+          // @ts-ignore
+          unlisten();
+        };
+      }
+      const trimmed = query.trim();
+      const key = trimmed;
+      if (!opts?.forceRefresh && !debugMode) {
+        const cached = cache[key];
+        if (cached) {
+          setResults(cached.results);
+          setSearched(true);
+          setFromCache({ used: true, updatedAt: cached.updatedAt });
+          setSearching(false);
+          setProgress(null);
+          saveHistory(trimmed);
+          return;
+        }
+      }
+
       if (debugMode) {
         const data = await api.searchStoriesDebug(query);
         setResults(data.results);
         setDebugLogs(data.logs);
         setDebugExpanded(true);
       } else {
-        const data = await api.searchStories(query);
+        const data = await api.searchStoriesWithProgress(query);
         setResults(data);
         setDebugLogs([]);
         setDebugExpanded(false);
+        // 更新缓存
+        const updatedAt = Date.now();
+        const nextCache = { ...cache, [key]: { results: data, updatedAt } };
+        setCache(nextCache);
+        try {
+          localStorage.setItem("arknights-story-search-cache-v1", JSON.stringify(nextCache));
+        } catch {}
+        setFromCache({ used: false });
       }
       setSearched(true);
+      saveHistory(query.trim());
     } catch (err) {
       console.error("Search failed:", err);
     } finally {
       setSearching(false);
+      setTimeout(() => setProgress(null), 400);
     }
   };
 
@@ -105,6 +153,19 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
 
   useEffect(() => {
     void refreshIndexStatus();
+    // 初始化历史记录
+    try {
+      const raw = localStorage.getItem("arknights-story-search-history");
+      setHistory(raw ? JSON.parse(raw) : []);
+      const cacheRaw = localStorage.getItem("arknights-story-search-cache-v1");
+      setCache(cacheRaw ? JSON.parse(cacheRaw) : {});
+    } catch {}
+    return () => {
+      if (progressUnlistenRef.current) {
+        progressUnlistenRef.current();
+        progressUnlistenRef.current = null;
+      }
+    };
   }, [refreshIndexStatus]);
 
   const renderIndexStatusText = () => {
@@ -147,11 +208,51 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
                 </button>
               )}
             </div>
-            <Button onClick={handleSearch} disabled={searching || !query.trim()}>
+            <Button onClick={() => handleSearch()} disabled={searching || !query.trim()}>
               <Search className="mr-2 h-4 w-4" />
               搜索
             </Button>
           </div>
+          {history.length > 0 && (
+            <div className="mt-2 space-y-2">
+              <div className="text-xs text-[hsl(var(--color-muted-foreground))]">历史搜索</div>
+              <div className="flex flex-wrap items-center gap-2">
+                {history.slice(0, 10).map((h) => (
+                  <div key={h} className="flex items-center gap-1 border rounded-full pl-2 pr-1 py-1">
+                    <button
+                      className="text-xs text-[hsl(var(--color-foreground))]"
+                      onClick={() => {
+                        setQuery(h);
+                        // 优先恢复缓存，若无缓存则正常搜索
+                        setTimeout(() => handleSearch({ forceRefresh: false }), 0);
+                      }}
+                    >
+                      {h}
+                    </button>
+                    <button
+                      className="text-[10px] px-2 py-0.5 rounded-full text-[hsl(var(--color-muted-foreground))] hover:bg-[hsl(var(--color-accent))]"
+                      onClick={() => {
+                        setQuery(h);
+                        setTimeout(() => handleSearch({ forceRefresh: true }), 0);
+                      }}
+                      title="刷新缓存"
+                    >
+                      刷新
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="ml-1 text-xs text-[hsl(var(--color-muted-foreground))] underline hover:text-[hsl(var(--color-foreground))]"
+                  onClick={() => {
+                    localStorage.removeItem("arknights-story-search-history");
+                    setHistory([]);
+                  }}
+                >
+                  清空历史
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mt-3 flex flex-wrap items-start gap-3">
             <div className="text-xs text-[hsl(var(--color-muted-foreground))] flex-1 min-w-[12rem]">
               {renderIndexStatusText()}
@@ -178,6 +279,17 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
               </Button>
             </div>
           </div>
+          {fromCache.used && (
+            <div className="mt-2 text-xs text-[hsl(var(--color-muted-foreground))]">
+              已从缓存恢复，更新于 {fromCache.updatedAt ? new Date(fromCache.updatedAt).toLocaleString() : "-"}
+              <button
+                className="ml-2 underline hover:text-[hsl(var(--color-foreground))]"
+                onClick={() => handleSearch({ forceRefresh: true })}
+              >
+                刷新缓存
+              </button>
+            </div>
+          )}
           {indexError && (
             <div className="mt-2 text-xs text-[hsl(var(--color-destructive))]">{indexError}</div>
           )}
@@ -210,11 +322,14 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
         <CustomScrollArea
           className="h-full"
           viewportClassName="reader-scroll"
+          trackOffsetTop="calc(3.5rem + 20px + env(safe-area-inset-top, 0px))"
           trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
         >
           <div className="container py-6 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
             {searching && (
-              <div className="text-center text-[hsl(var(--color-muted-foreground))]">搜索中...</div>
+              <div className="text-center text-[hsl(var(--color-muted-foreground))]">
+                {progress ? `${progress.phase} ${progress.current}/${progress.total}` : "搜索中..."}
+              </div>
             )}
 
             {!searching && searched && results.length === 0 && (

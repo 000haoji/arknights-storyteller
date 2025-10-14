@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/ui/collapsible";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface CharactersPanelProps {
@@ -53,13 +53,22 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
   const loadingRef = useRef(false);
   const [groupInfoByStoryId, setGroupInfoByStoryId] = useState<Map<string, GroupInfo>>(new Map());
   const [groupSearch, setGroupSearch] = useState<Record<string, string>>({});
+  const [cacheUsed, setCacheUsed] = useState(false);
+  const [cacheBuiltAt, setCacheBuiltAt] = useState<number | null>(null);
+  const [version, setVersion] = useState<string | null>(null);
 
-  const loadAll = useCallback(async () => {
+  const CACHE_PREFIX = "arknights-characters-cache";
+  const getCacheKey = useCallback((v: string) => `${CACHE_PREFIX}:${v}`, []);
+
+  const loadAll = useCallback(async (opts?: { forceRefresh?: boolean }) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
     setError(null);
     try {
+      const ver = await api.getCurrentVersion();
+      setVersion(ver);
+
       // 使用主页同样的分组与排序数据源
       const [mainGrouped, activityGrouped, memoryStories] = await Promise.all([
         api.getMainStoriesGrouped(),
@@ -113,30 +122,62 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
 
       const aggMap = new Map<string, CharacterAggregate>();
 
-      // 顺序加载，避免峰值占用过高；可根据需要增加并发
-      for (let i = 0; i < stories.length; i += 1) {
-        const story = stories[i];
+      // 1) 先尝试命中缓存
+      let cacheApplied = false;
+      if (!opts?.forceRefresh && ver) {
         try {
-          const content = await api.getStoryContent(story.storyTxt);
-          const localCounts = countCharactersInStory(content);
-          localCounts.forEach((count, name) => {
-            const existing = aggMap.get(name);
-            if (existing) {
-              existing.total += count;
-              existing.perStory.push({ story, count });
-            } else {
-              aggMap.set(name, {
-                name,
-                total: count,
-                perStory: [{ story, count }],
+          const raw = localStorage.getItem(getCacheKey(ver));
+          if (raw) {
+            const parsed: {
+              builtAt: number;
+              data: Record<string, { name: string; total: number; perStory: Array<{ storyId: string; count: number }> }>;
+            } = JSON.parse(raw);
+            Object.values(parsed.data).forEach((item) => {
+              const perStory: CharacterStatsPerStory[] = [];
+              item.perStory.forEach((ps) => {
+                const story = storiesMap.get(ps.storyId);
+                if (story) perStory.push({ story, count: ps.count });
               });
-            }
-          });
+              aggMap.set(item.name, { name: item.name, total: item.total, perStory });
+            });
+            cacheApplied = true;
+            setCacheUsed(true);
+            setCacheBuiltAt(parsed.builtAt);
+          }
         } catch (e) {
-          // 单章失败不影响整体
-          console.warn("[CharactersPanel] 读取剧情失败:", story.storyName, e);
+          // ignore cache parsing errors
+          console.warn("[CharactersPanel] 缓存读取失败，将重新构建", e);
         }
-        setProgress({ current: i + 1, total: stories.length });
+      }
+
+      // 顺序加载，避免峰值占用过高；可根据需要增加并发
+      if (!cacheApplied) {
+        setCacheUsed(false);
+        setCacheBuiltAt(null);
+        for (let i = 0; i < stories.length; i += 1) {
+          const story = stories[i];
+          try {
+            const content = await api.getStoryContent(story.storyTxt);
+            const localCounts = countCharactersInStory(content);
+            localCounts.forEach((count, name) => {
+              const existing = aggMap.get(name);
+              if (existing) {
+                existing.total += count;
+                existing.perStory.push({ story, count });
+              } else {
+                aggMap.set(name, {
+                  name,
+                  total: count,
+                  perStory: [{ story, count }],
+                });
+              }
+            });
+          } catch (e) {
+            // 单章失败不影响整体
+            console.warn("[CharactersPanel] 读取剧情失败:", story.storyName, e);
+          }
+          setProgress({ current: i + 1, total: stories.length });
+        }
       }
 
       // 整理每个角色的 perStory 排序（默认先按章节内排序）
@@ -153,13 +194,35 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
       });
 
       setAggregates(aggMap);
+
+      // 2) 没用缓存则保存缓存（精简 perStory 为 storyId + count）
+      if (!cacheApplied && ver) {
+        try {
+          const plain: Record<string, { name: string; total: number; perStory: Array<{ storyId: string; count: number }> }> = {};
+          aggMap.forEach((agg, name) => {
+            plain[name] = {
+              name,
+              total: agg.total,
+              perStory: agg.perStory.map((ps) => ({ storyId: ps.story.storyId, count: ps.count })),
+            };
+          });
+          const builtAt = Date.now();
+          localStorage.setItem(
+            getCacheKey(ver),
+            JSON.stringify({ builtAt, data: plain })
+          );
+          setCacheBuiltAt(builtAt);
+        } catch (e) {
+          console.warn("[CharactersPanel] 写入缓存失败", e);
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
     } finally {
       setLoading(false);
       loadingRef.current = false;
     }
-  }, []);
+  }, [getCacheKey]);
 
   useEffect(() => {
     loadAll();
@@ -211,13 +274,27 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
           {selected ? `人物：${selected}` : "人物统计"}
         </h1>
         {!selected && (
-          <div className="ml-auto w-56">
-            <Input placeholder="搜索人物" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+          <>
+            <div className="ml-auto w-56">
+              <Input placeholder="搜索人物" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-2"
+              onClick={() => loadAll({ forceRefresh: true })}
+              disabled={loading}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" /> 刷新统计
+            </Button>
+          </>
         )}
       </header>
 
-      <CustomScrollArea className="flex-1">
+      <CustomScrollArea
+        className="flex-1"
+        trackOffsetTop="calc(3.25rem + 20px + env(safe-area-inset-top, 0px))"
+      >
         <div className="p-4 space-y-4">
           {loading && (
             <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
@@ -229,6 +306,16 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
           )}
           {error && (
             <div className="text-sm text-[hsl(var(--color-destructive))]">{error}</div>
+          )}
+
+          {!loading && !selected && (
+            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+              {cacheUsed && cacheBuiltAt
+                ? `已使用缓存，构建于 ${new Date(cacheBuiltAt).toLocaleString()}`
+                : version
+                ? `未使用缓存（版本 ${version}）`
+                : null}
+            </div>
           )}
 
           {!selected && (

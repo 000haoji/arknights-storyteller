@@ -56,6 +56,7 @@ export function ReaderSettingsPanel({
               className="h-full min-h-0"
               viewportClassName="reader-scroll"
               hideTrackWhenIdle={false}
+              trackOffsetTop="4.25rem"
             >
               <div className="space-y-6 px-5 sm:px-8 py-7 pb-12">
                 {/* 阅读模式 */}

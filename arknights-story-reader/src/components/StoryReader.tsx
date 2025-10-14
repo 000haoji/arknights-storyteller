@@ -19,14 +19,17 @@ import {
   ListTree,
   Settings as SettingsIcon,
   Trash2,
+  Star,
 } from "lucide-react";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { ReaderSettingsPanel } from "@/components/ReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { useFavorites } from "@/hooks/useFavorites";
 import { useHighlights } from "@/hooks/useHighlights";
 import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { StoryEntry } from "@/types/story";
 
 interface ReaderSearchFocus {
   storyId: string;
@@ -76,6 +79,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const [highlightSegmentIndex, setHighlightSegmentIndex] = useState<number | null>(null);
   const [bookmarkMode, setBookmarkMode] = useState(false);
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null);
+  const [storyEntry, setStoryEntry] = useState<StoryEntry | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
@@ -85,6 +89,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
+  const { isFavorite, toggleFavorite } = useFavorites();
 
   const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
@@ -245,6 +250,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         .replace(/\.{3}/g, " ")
         .trim()
         .toLowerCase();
+      const queryNoSpaces = normalizedQuery.replace(/\s+/g, "");
+      const snippetNoSpaces = normalizedSnippet?.replace(/\s+/g, "");
 
       if (!normalizedQuery && !normalizedSnippet) {
         return null;
@@ -255,12 +262,13 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         const text = getSegmentSearchText(segment);
         if (!text) continue;
         const normalizedText = text.replace(/\s+/g, " ").toLowerCase();
+        const collapsedText = normalizedText.replace(/\s+/g, "");
 
-        if (normalizedSnippet && normalizedText.includes(normalizedSnippet)) {
+        if (normalizedSnippet && (normalizedText.includes(normalizedSnippet) || collapsedText.includes(snippetNoSpaces ?? ""))) {
           return i;
         }
 
-        if (normalizedQuery && normalizedText.includes(normalizedQuery)) {
+        if (normalizedQuery && (normalizedText.includes(normalizedQuery) || collapsedText.includes(queryNoSpaces))) {
           return i;
         }
       }
@@ -347,6 +355,20 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   useEffect(() => {
     loadStory();
   }, [loadStory]);
+
+  // 加载完整的 StoryEntry 用于收藏
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const entry = await api.getStoryEntry(storyId);
+        if (mounted) setStoryEntry(entry);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { mounted = false; };
+  }, [storyId]);
 
   useEffect(() => {
     setHighlightSegmentIndex(null);
@@ -586,7 +608,10 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
             searchHighlighted && "reader-search-highlight",
             characterHighlighted && "reader-character-highlight"
           )}
-          style={segmentStyle}
+          style={{
+            ...segmentStyle,
+            textAlign: segment.position === "right" ? ("right" as CSSProperties["textAlign"]) : undefined,
+          }}
         >
           {highlightButton}
           <div className="reader-character-name">{segment.characterName}</div>
@@ -790,6 +815,17 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
             <Button
               variant="ghost"
               size="icon"
+              disabled={!storyEntry}
+              onClick={() => storyEntry && toggleFavorite(storyEntry)}
+              aria-label={isFavorite(storyId) ? "取消收藏" : "收藏本关卡"}
+              title={isFavorite(storyId) ? "取消收藏" : "收藏本关卡"}
+              className={cn(isFavorite(storyId) && "text-[hsl(var(--color-primary))]")}
+            >
+              <Star className="h-5 w-5" fill={isFavorite(storyId) ? "currentColor" : "transparent"} strokeWidth={isFavorite(storyId) ? 0 : 2} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setBookmarkMode((prev) => !prev)}
               aria-label={bookmarkMode ? "关闭收藏模式" : "开启收藏模式"}
               title={bookmarkMode ? "关闭收藏模式" : "开启收藏模式"}
@@ -825,6 +861,12 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
             settings.readingMode === "paged" && "reader-scroll--paged"
           )}
           viewportRef={scrollContainerRef}
+          trackOffsetTop="calc(4rem + 20px + env(safe-area-inset-top, 0px))"
+          trackOffsetBottom={
+            settings.readingMode === "paged"
+              ? "5.5rem"
+              : "calc(2.5rem + env(safe-area-inset-bottom, 0px))"
+          }
         >
           <div className="container py-8 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
             <div className="reader-content motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700" style={readerContentStyles}>
@@ -892,6 +934,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                     className="h-full"
                     viewportClassName="reader-scroll"
                     hideTrackWhenIdle={false}
+                    trackOffsetTop="4.5rem"
                   >
                     <div className="p-6 space-y-8">
                       <section>

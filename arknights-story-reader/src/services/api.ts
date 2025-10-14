@@ -136,6 +136,19 @@ export const api = {
     return invoke("search_stories", { query });
   },
 
+  // 搜索剧情（带进度事件）
+  searchStoriesWithProgress: async (query: string): Promise<SearchResult[]> => {
+    return invoke("search_stories_with_progress", { query });
+  },
+
+  // 监听搜索进度
+  onSearchProgress: (callback: (progress: { phase: string; current: number; total: number; message: string }) => void) => {
+    return listen("search-progress", (event) => {
+      // @ts-expect-error payload shape from Rust
+      callback(event.payload);
+    });
+  },
+
   // 调试模式搜索剧情
   searchStoriesDebug: async (query: string): Promise<SearchDebugResponse> => {
     return invoke("search_stories_debug", { query });

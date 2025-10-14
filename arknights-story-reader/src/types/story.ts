@@ -10,6 +10,19 @@ export interface StoryEntry {
   storyInfo?: string; // 剧情简介文件路径
   storyReviewType: string;
   unLockType: string;
+  // 元数据（存在则返回）
+  storyDependence?: string | null;
+  storyCanShow?: number | null;
+  storyCanEnter?: number | null;
+  stageCount?: number | null;
+  requiredStages?: Array<{
+    stageId: string;
+    minState: string;
+    maxState: string;
+  }>; 
+  costItemType?: string | null;
+  costItemId?: string | null;
+  costItemCount?: number | null;
 }
 
 // 章节
@@ -55,6 +68,7 @@ export interface DialogueSegment {
   type: 'dialogue';
   characterName: string;
   text: string;
+  position?: 'left' | 'right' | null;
 }
 
 // 旁白段落
@@ -67,6 +81,7 @@ export interface NarrationSegment {
 export interface DecisionSegment {
   type: 'decision';
   options: string[];
+  values?: string[];
 }
 
 export interface SystemSegment {
@@ -96,7 +111,7 @@ export interface HeaderSegment {
 export interface StoryCategory {
   id: string;
   name: string;
-  type: 'chapter' | 'activity' | 'memory' | 'roguelike';
+  type: 'chapter' | 'activity' | 'memory' | 'roguelike' | 'sidestory';
   stories: StoryEntry[];
 }
 

@@ -440,6 +440,7 @@ impl DataService {
                 StorySegment::Dialogue {
                     character_name,
                     text,
+                    ..
                 } => {
                     parts.push(format!("{}：{}", character_name, text));
                 }
@@ -449,7 +450,7 @@ impl DataService {
                 | StorySegment::Sticker { text, .. } => {
                     parts.push(text.clone());
                 }
-                StorySegment::Decision { options } => {
+                StorySegment::Decision { options, .. } => {
                     parts.push(options.join(" / "));
                 }
                 StorySegment::Header { title } => {
@@ -1410,11 +1411,16 @@ impl DataService {
         let mut results = Vec::new();
         for row in rows {
             if let Ok((story_id, story_name, category, raw_content, snip)) = row {
-                let mut matched_text = if snip.trim().is_empty() {
-                    self.extract_context(&raw_content, &query_lower)
-                } else {
-                    snip
-                };
+                // 优先使用原始内容提取上下文，避免 tokenized_content 导致的空格断字
+                let mut matched_text = self.extract_context(&raw_content, &query_lower);
+                if matched_text.trim().is_empty() && !snip.trim().is_empty() {
+                    // 兜底：少数情况下 extract_context 未命中，回退 snippet 再做一次去空格优化
+                    let cleaned = snip
+                        .replace('\n', " ")
+                        .replace('\r', " ")
+                        .replace("  ", " ");
+                    matched_text = cleaned;
+                }
                 if matched_text.is_empty() {
                     let preview: String = raw_content.chars().take(120).collect();
                     matched_text = if preview.len() < raw_content.len() {
@@ -1875,6 +1881,96 @@ impl DataService {
             .into_iter()
             .map(|(name, stories, _, _)| (name, stories))
             .collect())
+    }
+
+    pub fn get_sidestory_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
+
+        for (id, value) in data.iter() {
+            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
+                if et == "SIDESTORY" {
+                    let group_name = value
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("支线剧情");
+
+                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                        let mut stories = Vec::new();
+                        for unlock_data in unlock_datas {
+                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                                stories.push(story);
+                            }
+                        }
+                        if !stories.is_empty() {
+                            stories.sort_by_key(|s| s.story_sort);
+                            groups.push((group_name.to_string(), stories, id.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        groups.sort_by(|a, b| compare_story_group_ids(&a.2, &b.2));
+        Ok(groups.into_iter().map(|(name, stories, _)| (name, stories)).collect())
+    }
+
+    pub fn get_roguelike_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
+
+        for (id, value) in data.iter() {
+            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
+                if et == "ROGUELIKE" {
+                    let group_name = value
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("肉鸽模式");
+
+                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                        let mut stories = Vec::new();
+                        for unlock_data in unlock_datas {
+                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                                stories.push(story);
+                            }
+                        }
+                        if !stories.is_empty() {
+                            stories.sort_by_key(|s| s.story_sort);
+                            groups.push((group_name.to_string(), stories, id.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
+        groups.sort_by(|a, b| compare_story_group_ids(&a.2, &b.2));
+        Ok(groups.into_iter().map(|(name, stories, _)| (name, stories)).collect())
     }
 
     pub fn get_memory_stories(&self) -> Result<Vec<StoryEntry>, String> {

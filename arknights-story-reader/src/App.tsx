@@ -34,13 +34,11 @@ function App() {
     setReaderFocus(null);
     setReaderInitialCharacter(null);
     setReaderVisible(true);
-    setActiveTab("stories");
   }, []);
 
   const handleBackToList = useCallback(() => {
     console.log("[App] 返回剧情列表");
     setReaderVisible(false);
-    setActiveTab("stories");
   }, []);
 
   const handleSearchResult = useCallback(
@@ -55,7 +53,6 @@ function App() {
       });
       setReaderInitialCharacter(null);
       setReaderVisible(true);
-      setActiveTab("stories");
     },
     []
   );
@@ -67,7 +64,6 @@ function App() {
       setReaderFocus(null);
       setReaderInitialCharacter(character);
       setReaderVisible(true);
-      setActiveTab("stories");
     },
     []
   );

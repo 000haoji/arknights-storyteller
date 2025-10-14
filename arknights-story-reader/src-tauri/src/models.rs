@@ -22,6 +22,33 @@ pub struct StoryEntry {
     pub story_review_type: String,
     #[serde(rename = "unLockType")]
     pub unlock_type: String,
+    // 额外元数据
+    #[serde(rename = "storyDependence")]
+    pub story_dependence: Option<String>,
+    #[serde(rename = "storyCanShow")]
+    pub story_can_show: Option<i32>,
+    #[serde(rename = "storyCanEnter")]
+    pub story_can_enter: Option<i32>,
+    #[serde(rename = "stageCount")]
+    pub stage_count: Option<i32>,
+    #[serde(rename = "requiredStages")]
+    pub required_stages: Option<Vec<RequiredStage>>,
+    #[serde(rename = "costItemType")]
+    pub cost_item_type: Option<String>,
+    #[serde(rename = "costItemId")]
+    pub cost_item_id: Option<String>,
+    #[serde(rename = "costItemCount")]
+    pub cost_item_count: Option<i32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequiredStage {
+    #[serde(rename = "stageId")]
+    pub stage_id: String,
+    #[serde(rename = "minState")]
+    pub min_state: String,
+    #[serde(rename = "maxState")]
+    pub max_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,12 +94,18 @@ pub enum StorySegment {
         #[serde(rename = "characterName")]
         character_name: String,
         text: String,
+        /// 可选的对话位置（例如右侧头像）
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<String>,
     },
     Narration {
         text: String,
     },
     Decision {
         options: Vec<String>,
+        /// 对应每个选项的值（若存在）
+        #[serde(skip_serializing_if = "Vec::is_empty", default)]
+        values: Vec<String>,
     },
     System {
         #[serde(rename = "speaker")]

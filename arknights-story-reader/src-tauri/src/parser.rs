@@ -8,6 +8,8 @@ lazy_static! {
         Regex::new(r#"(?i)([a-z0-9_]+)\s*=\s*"([^"]*)""#).expect("invalid attribute regex");
     static ref DECISION_NUMBERED_RE: Regex =
         Regex::new(r#"(?i)option\d+="([^"]+)""#).expect("invalid decision regex");
+    static ref DECISION_VALUE_NUMBERED_RE: Regex =
+        Regex::new(r#"(?i)value\d+="([^"]+)""#).expect("invalid decision value regex");
     static ref GENERIC_TAG_RE: Regex = Regex::new(r#"<[^>]+>"#).expect("invalid generic tag regex");
     static ref PARAGRAPH_TAG_RE: Regex =
         Regex::new(r"(?i)<p[^>]*>").expect("invalid paragraph tag regex");
@@ -49,15 +51,16 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
 
     match command.as_str() {
         "name" => {
-            let character_name = attrs.get("name")?.trim().to_string();
+            let character_name = attrs.get("name").map(|s| s.trim().to_string()).unwrap_or_default();
             let text = clean_text(remainder);
             if text.is_empty() {
                 return None;
             }
-            Some(StorySegment::Dialogue {
-                character_name,
-                text,
-            })
+            if character_name.is_empty() {
+                // 空名字多数用于场景字幕/地点时间
+                return Some(StorySegment::Subtitle { text, alignment: None });
+            }
+            Some(StorySegment::Dialogue { character_name, text, position: None })
         }
         "multiline" => {
             let character_name = attrs.get("name")?.trim().to_string();
@@ -65,13 +68,11 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
             if text.is_empty() {
                 return None;
             }
-            Some(StorySegment::Dialogue {
-                character_name,
-                text,
-            })
+            Some(StorySegment::Dialogue { character_name, text, position: None })
         }
         "decision" => {
             let mut options = Vec::new();
+            let mut values = Vec::new();
             if let Some(raw_options) = attrs.get("options") {
                 options.extend(
                     raw_options
@@ -91,11 +92,30 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
                 }
             }
 
+            if let Some(raw_values) = attrs.get("values") {
+                values.extend(
+                    raw_values
+                        .split(';')
+                        .map(|s| clean_text(s))
+                        .filter(|s| !s.is_empty()),
+                );
+            } else {
+                let target_source = attr_source.unwrap_or(inside);
+                for caps in DECISION_VALUE_NUMBERED_RE.captures_iter(target_source) {
+                    if let Some(value) = caps.get(1) {
+                        let val_text = clean_text(value.as_str());
+                        if !val_text.is_empty() {
+                            values.push(val_text);
+                        }
+                    }
+                }
+            }
+
             if options.is_empty() {
                 return None;
             }
 
-            Some(StorySegment::Decision { options })
+            Some(StorySegment::Decision { options, values })
         }
         "popupdialog" | "tutorial" => {
             let text = clean_text(remainder);
@@ -108,6 +128,8 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
                 .filter(|s| !s.is_empty());
             Some(StorySegment::System { speaker, text })
         }
+        // 非文本指令一律忽略
+        "background" | "image" | "imagetween" | "character" | "playmusic" | "stopmusic" | "playsound" | "delay" | "camerashake" | "blocker" => None,
         "subtitle" => {
             let text = attrs
                 .get("text")
@@ -299,10 +321,10 @@ fn parse_dialog_like(attrs: &HashMap<String, String>, remainder: &str) -> Option
     }
 
     if let Some(character_name) = resolve_speaker(attrs) {
-        Some(StorySegment::Dialogue {
-            character_name,
-            text,
-        })
+        let position = attrs
+            .get("isavatarright")
+            .and_then(|v| if is_truthy(v) { Some("right".to_string()) } else { None });
+        Some(StorySegment::Dialogue { character_name, text, position })
     } else {
         Some(StorySegment::Narration { text })
     }
@@ -368,6 +390,11 @@ fn humanize_identifier(raw: &str) -> String {
     parts.join(" ")
 }
 
+fn is_truthy(val: &str) -> bool {
+    let v = val.trim().to_ascii_lowercase();
+    matches!(v.as_str(), "1" | "true" | "yes" | "y")
+}
+
 trait IfEmpty {
     fn if_empty_then(self, f: impl FnOnce() -> String) -> String;
 }
@@ -398,6 +425,7 @@ mod tests {
             StorySegment::Dialogue {
                 character_name,
                 text,
+                ..
             } => {
                 assert_eq!(character_name, "杜宾");
                 assert_eq!(text, "可恶......");
@@ -415,7 +443,7 @@ mod tests {
         assert_eq!(result.segments.len(), 2);
 
         match &result.segments[0] {
-            StorySegment::Decision { options } => {
+            StorySegment::Decision { options, .. } => {
                 assert_eq!(options.len(), 3);
                 assert_eq!(options[0], "早就该交给我了！");
                 assert_eq!(options[1], "......");
@@ -425,7 +453,7 @@ mod tests {
         }
 
         match &result.segments[1] {
-            StorySegment::Decision { options } => {
+            StorySegment::Decision { options, .. } => {
                 assert_eq!(options, &vec!["选项A".to_string(), "选项B".to_string()]);
             }
             _ => panic!("Expected decision segment"),
@@ -474,6 +502,7 @@ mod tests {
             StorySegment::Dialogue {
                 character_name,
                 text,
+                ..
             } => {
                 assert_eq!(character_name, "Broca");
                 assert_eq!(text, "橘子酱通心粉，我有点印象。");
@@ -485,6 +514,7 @@ mod tests {
             StorySegment::Dialogue {
                 character_name,
                 text,
+                ..
             } => {
                 assert_eq!(character_name, "Texas2");
                 assert!(text.contains("把饭钱也给老板了"));
