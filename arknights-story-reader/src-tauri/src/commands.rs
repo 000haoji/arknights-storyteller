@@ -1,6 +1,7 @@
 use crate::data_service::DataService;
 use crate::models::{
-    Chapter, ParsedStoryContent, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
+    Chapter, ParsedStoryContent, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
+    StoryIndexStatus,
 };
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
@@ -95,6 +96,15 @@ pub async fn get_story_info(
 }
 
 #[tauri::command]
+pub async fn get_story_entry(
+    state: State<'_, AppState>,
+    story_id: String,
+) -> Result<StoryEntry, String> {
+    let service = lock_service(&state.data_service);
+    service.get_story_entry(&story_id)
+}
+
+#[tauri::command]
 pub async fn get_story_index_status(
     state: State<'_, AppState>,
 ) -> Result<StoryIndexStatus, String> {
@@ -117,6 +127,15 @@ pub async fn search_stories(
 ) -> Result<Vec<SearchResult>, String> {
     let service = lock_service(&state.data_service);
     service.search_stories(&query)
+}
+
+#[tauri::command]
+pub async fn search_stories_debug(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<SearchDebugResponse, String> {
+    let service = lock_service(&state.data_service);
+    service.search_stories_with_debug(&query)
 }
 
 #[tauri::command]

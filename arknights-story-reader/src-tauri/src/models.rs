@@ -120,6 +120,12 @@ pub struct SearchResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchDebugResponse {
+    pub results: Vec<SearchResult>,
+    pub logs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoryIndexStatus {
     pub ready: bool,
     pub total: usize,

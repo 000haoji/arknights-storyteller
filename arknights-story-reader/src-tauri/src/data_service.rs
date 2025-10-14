@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use reqwest::blocking::Client;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -1149,7 +1149,7 @@ impl DataService {
             FROM story_index
             WHERE story_index MATCH ?1
             ORDER BY bm25(story_index)
-            LIMIT 100
+            LIMIT 500
         ",
             )
             .map_err(|e| format!("Failed to prepare story index query: {}", e))?;
@@ -1246,26 +1246,130 @@ impl DataService {
         }
     }
 
+    pub fn search_stories_with_debug(
+        &self,
+        query: &str,
+    ) -> Result<SearchDebugResponse, String> {
+        let mut logs = Vec::new();
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            logs.push("查询为空，直接返回".to_string());
+            return Ok(SearchDebugResponse {
+                results: Vec::new(),
+                logs,
+            });
+        }
+
+        let start_time = Instant::now();
+        logs.push(format!("开始搜索: \"{}\"", trimmed));
+
+        let index_attempt_start = Instant::now();
+        match self.search_stories_with_index(trimmed) {
+            Ok(Some(results)) => {
+                let index_elapsed = index_attempt_start.elapsed();
+                logs.push(format!(
+                    "全文索引查询完成，耗时 {} ms，结果 {} 条",
+                    index_elapsed.as_millis(),
+                    results.len()
+                ));
+                if results.is_empty() {
+                    logs.push("索引结果为空，转为线性扫描".to_string());
+                } else {
+                    logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
+                    return Ok(SearchDebugResponse { results, logs });
+                }
+            }
+            Ok(None) => {
+                logs.push(format!(
+                    "全文索引不可用或未建立，耗时 {} ms",
+                    index_attempt_start.elapsed().as_millis()
+                ));
+            }
+            Err(err) => {
+                logs.push(format!(
+                    "全文索引查询失败: {} (耗时 {} ms)，将回退线性扫描",
+                    err,
+                    index_attempt_start.elapsed().as_millis()
+                ));
+            }
+        }
+
+        let fallback_start = Instant::now();
+        let fallback_results = self.search_stories_fallback(trimmed)?;
+        logs.push(format!(
+            "线性扫描完成，耗时 {} ms，结果 {} 条",
+            fallback_start.elapsed().as_millis(),
+            fallback_results.len()
+        ));
+        logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
+
+        Ok(SearchDebugResponse {
+            results: fallback_results,
+            logs,
+        })
+    }
+
+    pub fn get_story_entry(&self, story_id: &str) -> Result<StoryEntry, String> {
+        let stories = self.collect_stories_for_index()?;
+        for indexed in stories {
+            if indexed.story.story_id == story_id {
+                return Ok(indexed.story);
+            }
+        }
+        Err(format!("Story {} 不存在", story_id))
+    }
+
     /// 提取匹配文本的上下文
     fn extract_context(&self, content: &str, query: &str) -> String {
+        if content.is_empty() || query.is_empty() {
+            return String::new();
+        }
+
         let content_lower = content.to_lowercase();
+
         if let Some(pos) = content_lower.find(query) {
-            let start = pos.saturating_sub(50);
-            let end = (pos + query.len() + 50).min(content.len());
-            let context = &content[start..end];
-            return format!("...{}...", context.trim());
+            return Self::build_context_snippet(content, pos, query.len());
         }
 
         for token in query.split_whitespace().filter(|t| !t.is_empty()) {
             if let Some(pos) = content_lower.find(token) {
-                let start = pos.saturating_sub(50);
-                let end = (pos + token.len() + 50).min(content.len());
-                let context = &content[start..end];
-                return format!("...{}...", context.trim());
+                return Self::build_context_snippet(content, pos, token.len());
             }
         }
 
         String::new()
+    }
+
+    fn build_context_snippet(content: &str, byte_start: usize, pattern_bytes: usize) -> String {
+        let prefix = match content.get(..byte_start) {
+            Some(slice) => slice,
+            None => return String::new(),
+        };
+
+        let byte_end = byte_start.saturating_add(pattern_bytes).min(content.len());
+        let matched_slice = match content.get(byte_start..byte_end) {
+            Some(slice) => slice,
+            None => "",
+        };
+
+        let start_char_index = prefix.chars().count();
+        let matched_char_len = matched_slice.chars().count();
+
+        let chars: Vec<char> = content.chars().collect();
+        if chars.is_empty() {
+            return String::new();
+        }
+
+        let window = 50usize;
+        let snippet_start = start_char_index.saturating_sub(window);
+        let snippet_end = (start_char_index + matched_char_len + window).min(chars.len());
+
+        let snippet: String = chars[snippet_start..snippet_end].iter().collect();
+        if snippet.is_empty() {
+            return String::new();
+        }
+
+        format!("...{}...", snippet.trim())
     }
 
     pub fn get_main_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {

@@ -108,6 +108,11 @@ export interface SearchResult {
   category: string;
 }
 
+export interface SearchDebugResponse {
+  results: SearchResult[];
+  logs: string[];
+}
+
 export interface StoryIndexStatus {
   ready: boolean;
   total: number;

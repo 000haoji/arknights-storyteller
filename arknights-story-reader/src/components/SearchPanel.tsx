@@ -19,14 +19,26 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
   const [buildingIndex, setBuildingIndex] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);
   const [indexMessage, setIndexMessage] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [debugExpanded, setDebugExpanded] = useState(false);
 
   const handleSearch = async () => {
     if (!query.trim()) return;
 
     try {
       setSearching(true);
-      const data = await api.searchStories(query);
-      setResults(data);
+      if (debugMode) {
+        const data = await api.searchStoriesDebug(query);
+        setResults(data.results);
+        setDebugLogs(data.logs);
+        setDebugExpanded(true);
+      } else {
+        const data = await api.searchStories(query);
+        setResults(data);
+        setDebugLogs([]);
+        setDebugExpanded(false);
+      }
       setSearched(true);
     } catch (err) {
       console.error("Search failed:", err);
@@ -45,6 +57,8 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
     setQuery("");
     setResults([]);
     setSearched(false);
+    setDebugLogs([]);
+    setDebugExpanded(false);
   };
 
   const refreshIndexStatus = useCallback(async () => {
@@ -137,6 +151,17 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
               >
                 {buildingIndex ? "索引建立中..." : indexStatus?.ready ? "重新建立索引" : "建立全文索引"}
               </Button>
+              <Button
+                variant={debugMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setDebugMode((prev) => !prev);
+                  setDebugLogs([]);
+                  setDebugExpanded(false);
+                }}
+              >
+                调试日志
+              </Button>
             </div>
           </div>
           {indexError && (
@@ -144,6 +169,24 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
           )}
           {indexMessage && (
             <div className="mt-2 text-xs text-[hsl(var(--color-muted-foreground))]">{indexMessage}</div>
+          )}
+          {debugMode && debugLogs.length > 0 && (
+            <div className="mt-3 border rounded-lg bg-[hsl(var(--color-muted)/0.1)]">
+              <button
+                onClick={() => setDebugExpanded((prev) => !prev)}
+                className="w-full px-3 py-2 text-xs text-left font-medium flex items-center justify-between"
+              >
+                <span>调试记录（{debugLogs.length} 条）</span>
+                <span>{debugExpanded ? "收起" : "展开"}</span>
+              </button>
+              {debugExpanded && (
+                <div className="max-h-48 overflow-auto border-t text-[11px] leading-relaxed font-mono px-3 py-2 space-y-1">
+                  {debugLogs.map((log, index) => (
+                    <div key={index}>{log}</div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       </header>

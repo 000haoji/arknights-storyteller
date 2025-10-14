@@ -7,6 +7,7 @@ import type {
   SearchResult,
   StoryEntry,
   StoryIndexStatus,
+  SearchDebugResponse,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -129,6 +130,11 @@ export const api = {
   // 搜索剧情
   searchStories: async (query: string): Promise<SearchResult[]> => {
     return invoke("search_stories", { query });
+  },
+
+  // 调试模式搜索剧情
+  searchStoriesDebug: async (query: string): Promise<SearchDebugResponse> => {
+    return invoke("search_stories_debug", { query });
   },
 
   // 获取主线剧情（按章节分组）

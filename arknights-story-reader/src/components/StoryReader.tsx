@@ -66,6 +66,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [insightsOpen, setInsightsOpen] = useState(false);
   const [progressValue, setProgressValue] = useState(0);
+  const [bookmarkMode, setBookmarkMode] = useState(false);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
@@ -386,8 +387,14 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       const spacing = isLast ? "0" : readerSpacing;
       const highlightable = isSegmentHighlightable(segment);
       const highlighted = highlightable ? isHighlighted(index) : false;
+      const showHighlightButton = highlightable && bookmarkMode;
 
-      const highlightButton = highlightable ? (
+      const segmentStyle: CSSProperties = { marginBottom: spacing };
+      if (!showHighlightButton) {
+        segmentStyle.paddingRight = "1.25rem";
+      }
+
+      const highlightButton = showHighlightButton ? (
         <button
           type="button"
           className={cn("reader-highlight-toggle", highlighted && "is-active")}
@@ -411,7 +418,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
               highlighted && "reader-highlighted"
             )}
-            style={{ marginBottom: spacing }}
+            style={segmentStyle}
           >
             {highlightButton}
             <div className="reader-character-name">{segment.characterName}</div>
@@ -429,7 +436,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               "reader-narration reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
               highlighted && "reader-highlighted"
             )}
-            style={{ marginBottom: spacing }}
+            style={segmentStyle}
           >
             {highlightButton}
             {renderLines(segment.text)}
@@ -469,7 +476,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               "reader-system reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
               highlighted && "reader-highlighted"
             )}
-            style={{ marginBottom: spacing }}
+            style={segmentStyle}
           >
             {highlightButton}
             {segment.speaker ? (
@@ -495,7 +502,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               "reader-subtitle reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
               highlighted && "reader-highlighted"
             )}
-            style={{ marginBottom: spacing, textAlign: alignment }}
+            style={{ ...segmentStyle, textAlign: alignment }}
           >
             {highlightButton}
             {renderLines(segment.text)}
@@ -518,7 +525,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               "reader-sticker reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
               highlighted && "reader-highlighted"
             )}
-            style={{ marginBottom: spacing, textAlign: alignment }}
+            style={{ ...segmentStyle, textAlign: alignment }}
           >
             {highlightButton}
             {renderLines(segment.text)}
@@ -541,7 +548,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       return null;
     },
-    [isHighlighted, readerSpacing, renderLines, toggleHighlight]
+    [bookmarkMode, isHighlighted, readerSpacing, renderLines, toggleHighlight]
   );
 
   if (loading) {
@@ -581,6 +588,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       ref={readerRootRef}
       className="h-full flex flex-col overflow-hidden reader-surface motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
       data-reader-theme={settings.theme}
+      data-bookmark-mode={bookmarkMode ? "enabled" : "disabled"}
     >
       <header className="flex-shrink-0 z-20 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500">
         <div className="container flex items-center gap-2 h-16">
@@ -603,6 +611,17 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
               aria-label="剧情导览"
             >
               <ListTree className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setBookmarkMode((prev) => !prev)}
+              aria-label={bookmarkMode ? "关闭收藏模式" : "开启收藏模式"}
+              title={bookmarkMode ? "关闭收藏模式" : "开启收藏模式"}
+              aria-pressed={bookmarkMode}
+              className={cn(bookmarkMode && "text-[hsl(var(--color-primary))]")}
+            >
+              {bookmarkMode ? <BookmarkCheck className="h-5 w-5" /> : <BookmarkPlus className="h-5 w-5" />}
             </Button>
             <Button
               variant="ghost"
