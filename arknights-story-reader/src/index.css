@@ -454,6 +454,7 @@ body {
 
 .scroll-area__track[data-visible="true"] {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .scroll-area__thumb {
@@ -463,6 +464,11 @@ body {
   border-radius: 9999px;
   background: hsl(var(--color-primary));
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.25);
+  cursor: grab;
+}
+
+.scroll-area__thumb:active {
+  cursor: grabbing;
 }
 
 .reader-scroll--paged .reader-content {

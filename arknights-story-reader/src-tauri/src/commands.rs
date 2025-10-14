@@ -130,6 +130,18 @@ pub async fn search_stories(
 }
 
 #[tauri::command]
+pub async fn search_stories_with_progress(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<SearchResult>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.search_stories_with_progress(&app, &query))
+        .await
+        .map_err(|err| format!("Failed to join search with progress task: {}", err))?
+}
+
+#[tauri::command]
 pub async fn search_stories_debug(
     state: State<'_, AppState>,
     query: String,

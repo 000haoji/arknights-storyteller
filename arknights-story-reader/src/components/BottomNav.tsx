@@ -1,9 +1,9 @@
-import { Book, Search, Settings } from "lucide-react";
+import { Book, Search, Settings, Users2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BottomNavProps {
-  activeTab: "stories" | "search" | "settings";
-  onTabChange: (tab: "stories" | "search" | "settings") => void;
+  activeTab: "stories" | "characters" | "search" | "settings";
+  onTabChange: (tab: "stories" | "characters" | "search" | "settings") => void;
 }
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
@@ -19,6 +19,17 @@ export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
         >
           <Book className="h-5 w-5" />
           <span className="text-xs">剧情</span>
+        </button>
+
+        <button
+          onClick={() => onTabChange("characters")}
+          className={cn(
+            "flex flex-col items-center gap-1 flex-1 py-2 transition-colors",
+            activeTab === "characters" ? "text-[hsl(var(--color-primary))]" : "text-[hsl(var(--color-muted-foreground))]"
+          )}
+        >
+          <Users2 className="h-5 w-5" />
+          <span className="text-xs">人物</span>
         </button>
 
         <button

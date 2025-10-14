@@ -8,8 +8,9 @@ import { BottomNav } from "@/components/BottomNav";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { KeepAlive } from "@/components/KeepAlive";
+import { CharactersPanel } from "@/components/CharactersPanel";
 
-type Tab = "stories" | "search" | "settings";
+type Tab = "stories" | "characters" | "search" | "settings";
 
 interface ReaderFocus {
   storyId: string;
@@ -23,6 +24,7 @@ function App() {
   const [readerVisible, setReaderVisible] = useState(false);
   const [readerStory, setReaderStory] = useState<StoryEntry | null>(null);
   const [readerFocus, setReaderFocus] = useState<ReaderFocus | null>(null);
+  const [readerInitialCharacter, setReaderInitialCharacter] = useState<string | null>(null);
 
   const readerActive = readerVisible && readerStory !== null;
 
@@ -30,6 +32,7 @@ function App() {
     console.log("[App] 选择剧情:", story.storyName);
     setReaderStory(story);
     setReaderFocus(null);
+    setReaderInitialCharacter(null);
     setReaderVisible(true);
     setActiveTab("stories");
   }, []);
@@ -50,6 +53,19 @@ function App() {
         snippet: focus.snippet,
         issuedAt: Date.now(),
       });
+      setReaderInitialCharacter(null);
+      setReaderVisible(true);
+      setActiveTab("stories");
+    },
+    []
+  );
+
+  const handleOpenStoryWithCharacter = useCallback(
+    (story: StoryEntry, character: string) => {
+      console.log("[App] 从人物面板打开剧情:", story.storyName, "角色:", character);
+      setReaderStory(story);
+      setReaderFocus(null);
+      setReaderInitialCharacter(character);
       setReaderVisible(true);
       setActiveTab("stories");
     },
@@ -82,6 +98,7 @@ function App() {
       storyPath={readerStory.storyTxt}
       storyName={readerStory.storyName}
       storyId={readerStory.storyId}
+      initialCharacter={readerInitialCharacter ?? undefined}
       initialFocus={
         readerFocus && readerFocus.storyId === readerStory.storyId ? readerFocus : null
       }
@@ -99,10 +116,16 @@ function App() {
   );
 
   const appContent = (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden pt-[calc(env(safe-area-inset-top,0px)+20px)]">
       <div className="relative flex-1 overflow-hidden">
         <KeepAlive active={!readerActive && activeTab === "stories"} className="absolute inset-0">
           {storyListView}
+        </KeepAlive>
+        <KeepAlive
+          active={!readerActive && activeTab === "characters"}
+          className="absolute inset-0"
+        >
+          <CharactersPanel onOpenStory={handleOpenStoryWithCharacter} />
         </KeepAlive>
         <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
           {searchView}
@@ -128,4 +151,3 @@ function App() {
 }
 
 export default App;
-

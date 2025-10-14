@@ -1,5 +1,5 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, MutableRefObject } from "react";
+import type { CSSProperties, MutableRefObject, PointerEvent as ReactPointerEvent } from "react";
 import { cn } from "@/lib/utils";
 
 interface CustomScrollAreaProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -28,8 +28,11 @@ export const CustomScrollArea = forwardRef<HTMLDivElement, CustomScrollAreaProps
     ref
   ) {
     const viewportInnerRef = useRef<HTMLDivElement | null>(null);
+    const trackRef = useRef<HTMLDivElement | null>(null);
+    const thumbRef = useRef<HTMLDivElement | null>(null);
     const metricsRef = useRef<{ height: number; top: number }>({ height: 0, top: 0 });
     const hideTimerRef = useRef<number | null>(null);
+    const draggingRef = useRef<{ pointerId: number; offsetY: number } | null>(null);
     const [thumbMetrics, setThumbMetrics] = useState({ height: 0, top: 0 });
     const [trackActive, setTrackActive] = useState(false);
 
@@ -130,11 +133,13 @@ export const CustomScrollArea = forwardRef<HTMLDivElement, CustomScrollAreaProps
     }, [clearHideTimer, scheduleHide, showTrack]);
 
     const handlePointerEnter = useCallback(() => {
+      if (draggingRef.current) return;
       clearHideTimer();
       showTrack();
     }, [clearHideTimer, showTrack]);
 
     const handlePointerLeave = useCallback(() => {
+      if (draggingRef.current) return;
       scheduleHide();
     }, [scheduleHide]);
 
@@ -156,6 +161,89 @@ export const CustomScrollArea = forwardRef<HTMLDivElement, CustomScrollAreaProps
       };
     }, [formatOffset, style, trackOffsetBottom, trackOffsetRight, trackOffsetTop]);
 
+    const handleThumbPointerDown = useCallback(
+      (event: ReactPointerEvent<HTMLDivElement>) => {
+        const viewport = viewportInnerRef.current;
+        const track = trackRef.current;
+        const thumb = thumbRef.current;
+        if (!viewport || !track || !thumb) return;
+
+        event.preventDefault();
+        clearHideTimer();
+        showTrack();
+
+        const thumbRect = thumb.getBoundingClientRect();
+        draggingRef.current = {
+          pointerId: event.pointerId,
+          offsetY: event.clientY - thumbRect.top,
+        };
+
+        if (thumb.setPointerCapture) {
+          try {
+            thumb.setPointerCapture(event.pointerId);
+          } catch (error) {
+            console.warn("[ScrollArea] setPointerCapture failed", error);
+          }
+        }
+      },
+      [clearHideTimer, showTrack]
+    );
+
+    useEffect(() => {
+      const handlePointerMove = (event: PointerEvent) => {
+        const drag = draggingRef.current;
+        if (!drag) return;
+
+        const viewport = viewportInnerRef.current;
+        const track = trackRef.current;
+        const thumb = thumbRef.current;
+        if (!viewport || !track) return;
+
+        const trackRect = track.getBoundingClientRect();
+        const thumbHeight = thumb?.offsetHeight ?? metricsRef.current.height;
+        const maxOffset = Math.max(trackRect.height - thumbHeight, 0);
+        let nextTop = event.clientY - trackRect.top - drag.offsetY;
+        nextTop = Math.max(0, Math.min(nextTop, maxOffset));
+
+        const scrollRange = viewport.scrollHeight - viewport.clientHeight;
+        const nextScrollTop = maxOffset <= 0 ? 0 : (nextTop / maxOffset) * scrollRange;
+        viewport.scrollTop = nextScrollTop;
+
+        metricsRef.current = { height: thumbHeight, top: nextTop };
+        setThumbMetrics((prev) => {
+          if (Math.abs(prev.top - nextTop) < 0.5 && Math.abs(prev.height - thumbHeight) < 0.5) {
+            return prev;
+          }
+          return { height: thumbHeight, top: nextTop };
+        });
+      };
+
+      const handlePointerUp = (event: PointerEvent) => {
+        const drag = draggingRef.current;
+        if (!drag) return;
+
+        draggingRef.current = null;
+        if (thumbRef.current?.releasePointerCapture) {
+          try {
+            thumbRef.current.releasePointerCapture(event.pointerId);
+          } catch (error) {
+            console.warn("[ScrollArea] releasePointerCapture failed", error);
+          }
+        }
+        scheduleHide();
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+
+      return () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+      };
+    }, [scheduleHide]);
+
     return (
       <div
         ref={ref}
@@ -171,9 +259,11 @@ export const CustomScrollArea = forwardRef<HTMLDivElement, CustomScrollAreaProps
         >
           {children}
         </div>
-        <div className="scroll-area__track" data-visible={shouldShowTrack}>
+        <div ref={trackRef} className="scroll-area__track" data-visible={shouldShowTrack}>
           <div
             className="scroll-area__thumb"
+            ref={thumbRef}
+            onPointerDown={handleThumbPointerDown}
             style={{
               height: `${thumbMetrics.height}px`,
               transform: `translateY(${thumbMetrics.top}px)`,

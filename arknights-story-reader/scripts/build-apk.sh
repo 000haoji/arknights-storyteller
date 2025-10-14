@@ -69,4 +69,65 @@ fi
 
 npm exec -- tauri android build "$@"
 
-info "APK build finished. Check the Tauri Android output directory for the generated artifact."
+# Signing section -----------------------------------------------------------
+
+UNSIGNED_APK="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk"
+[ -f "$UNSIGNED_APK" ] || fail "Unsigned APK not found at $UNSIGNED_APK"
+
+KEYSTORE_PATH="${ANDROID_KEYSTORE_PATH:-$HOME/.android/release.keystore}"
+KEY_ALIAS="${ANDROID_KEY_ALIAS:-release}"
+KEYSTORE_PASSWORD="${ANDROID_KEYSTORE_PASSWORD:-}"
+KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+
+[ -f "$KEYSTORE_PATH" ] || fail "Keystore not found: $KEYSTORE_PATH (set ANDROID_KEYSTORE_PATH)"
+[ -n "$KEYSTORE_PASSWORD" ] || fail "Please export ANDROID_KEYSTORE_PASSWORD"
+[ -n "$KEY_PASSWORD" ] || fail "Please export ANDROID_KEY_PASSWORD or ensure it's same as keystore password"
+
+find_build_tool() {
+  local tool="$1"
+  if command -v "$tool" >/dev/null 2>&1; then
+    command -v "$tool"
+    return 0
+  fi
+  local sdk="${ANDROID_SDK_ROOT}"
+  if [ -z "$sdk" ]; then
+    return 1
+  fi
+  local dirs
+  IFS=$'\n' read -rd '' -a dirs < <(find "$sdk"/build-tools -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V && printf '\0')
+  for dir in "${dirs[@]}"; do
+    if [ -x "$dir/$tool" ]; then
+      echo "$dir/$tool"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ZIPALIGN=$(find_build_tool zipalign)
+APKSIGNER=$(find_build_tool apksigner)
+[ -n "$ZIPALIGN" ] || fail "zipalign not found in \$ANDROID_HOME/build-tools. Please install it."
+[ -n "$APKSIGNER" ] || fail "apksigner not found in \$ANDROID_HOME/build-tools. Please install it."
+
+OUTPUT_DIR="$(dirname "$UNSIGNED_APK")"
+ALIGNED_APK="$OUTPUT_DIR/app-universal-release-aligned.apk"
+SIGNED_APK="$OUTPUT_DIR/app-universal-release-signed.apk"
+
+rm -f "$ALIGNED_APK" "$SIGNED_APK"
+
+info "Aligning APK..."
+"$ZIPALIGN" -v 4 "$UNSIGNED_APK" "$ALIGNED_APK" || fail "zipalign failed"
+
+info "Signing APK..."
+"$APKSIGNER" sign \
+  --ks "$KEYSTORE_PATH" \
+  --ks-key-alias "$KEY_ALIAS" \
+  --ks-pass "pass:$KEYSTORE_PASSWORD" \
+  --key-pass "pass:$KEY_PASSWORD" \
+  --in "$ALIGNED_APK" \
+  --out "$SIGNED_APK" || fail "apksigner failed"
+
+info "Verifying signature..."
+"$APKSIGNER" verify --print-certs "$SIGNED_APK" || fail "Signature verification failed"
+
+info "APK build finished. Signed APK: $SIGNED_APK"

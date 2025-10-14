@@ -41,6 +41,7 @@ interface StoryReaderProps {
   storyName: string;
   onBack: () => void;
   initialFocus?: ReaderSearchFocus | null;
+  initialCharacter?: string;
 }
 
 interface RenderableSegment {
@@ -64,7 +65,7 @@ function isSegmentHighlightable(segment: StorySegment): boolean {
   }
 }
 
-export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocus }: StoryReaderProps) {
+export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocus, initialCharacter }: StoryReaderProps) {
   const [content, setContent] = useState<ParsedStoryContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
   const focusAppliedRef = useRef<number | null>(null);
+  const characterAppliedRef = useRef<string | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
@@ -323,8 +325,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
 
     const characters = Array.from(characterMap.entries())
       .map(([name, meta]) => ({ name, ...meta }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 12);
+      .sort((a, b) => b.count - a.count);
 
     return { characters, decisions };
   }, [processedSegments]);
@@ -378,6 +379,29 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       setProgressValue(Number.isFinite(ratio) ? ratio : 0);
     }
   }, [processedSegments, settings.readingMode, progress, totalPages]);
+
+  // 初始角色高亮与定位
+  useEffect(() => {
+    if (!processedSegments.length) return;
+    if (!initialCharacter) return;
+    if (characterAppliedRef.current === initialCharacter && activeCharacter === initialCharacter) return;
+
+    // 查找该角色的第一条对话段落
+    let firstIndex: number | null = null;
+    for (let i = 0; i < processedSegments.length; i += 1) {
+      const seg = processedSegments[i];
+      if (seg.type === "dialogue" && seg.characterName === initialCharacter) {
+        firstIndex = i;
+        break;
+      }
+    }
+    setActiveCharacter(initialCharacter);
+    characterAppliedRef.current = initialCharacter;
+    if (firstIndex !== null) {
+      // 平滑滚动至第一条出现位置
+      scrollToSegment(firstIndex, "auto");
+    }
+  }, [processedSegments, initialCharacter, activeCharacter, scrollToSegment]);
 
   useEffect(() => {
     if (!processedSegments.length || settings.readingMode !== "scroll") return;
