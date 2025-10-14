@@ -74,6 +74,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const [progressValue, setProgressValue] = useState(0);
   const [highlightSegmentIndex, setHighlightSegmentIndex] = useState<number | null>(null);
   const [bookmarkMode, setBookmarkMode] = useState(false);
+  const [activeCharacter, setActiveCharacter] = useState<string | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
@@ -349,6 +350,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   useEffect(() => {
     setHighlightSegmentIndex(null);
     focusAppliedRef.current = null;
+    setActiveCharacter(null);
   }, [storyId, storyPath]);
 
   useLayoutEffect(() => {
@@ -444,6 +446,27 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     return () => window.removeEventListener("keydown", handleKey);
   }, [settings.readingMode, totalPages]);
 
+  const jumpToSegment = useCallback(
+    (index: number, options?: { highlightSearch?: boolean }) => {
+      if (!processedSegments.length) return;
+
+      if (options?.highlightSearch) {
+        setHighlightSegmentIndex(index);
+      } else if (options?.highlightSearch === false) {
+        setHighlightSegmentIndex(null);
+      }
+
+      if (settings.readingMode === "scroll") {
+        scrollToSegment(index);
+      } else {
+        const targetPage = Math.min(Math.floor(index / SEGMENTS_PER_PAGE), totalPages - 1);
+        setCurrentPage(targetPage);
+        setTimeout(() => scrollToSegment(index), 120);
+      }
+    },
+    [processedSegments, scrollToSegment, settings.readingMode, totalPages]
+  );
+
   useEffect(() => {
     if (!initialFocus || !processedSegments.length) return;
     const token = initialFocus.issuedAt ?? Date.now();
@@ -458,50 +481,38 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       return;
     }
 
-    const applyFocus = () => {
-      setHighlightSegmentIndex(targetIndex);
-      scrollToSegment(targetIndex);
-      focusAppliedRef.current = token;
-    };
-
-    if (settings.readingMode === "paged") {
-      const targetPage = Math.min(Math.floor(targetIndex / SEGMENTS_PER_PAGE), totalPages - 1);
-      if (targetPage !== currentPage) {
-        setCurrentPage(targetPage);
-        setTimeout(() => applyFocus(), 120);
-      } else {
-        setTimeout(() => applyFocus(), 16);
-      }
-    } else {
-      setTimeout(() => applyFocus(), 16);
-    }
+    setActiveCharacter(null);
+    jumpToSegment(targetIndex, { highlightSearch: true });
+    focusAppliedRef.current = token;
   }, [
     initialFocus,
     processedSegments,
     findFocusSegmentIndex,
-    scrollToSegment,
-    settings.readingMode,
-    currentPage,
-    totalPages,
+    jumpToSegment,
     highlightSegmentIndex,
   ]);
 
-  const handleJumpToSegment = useCallback(
-    (index: number) => {
-      if (!processedSegments.length) return;
-
-      setHighlightSegmentIndex(index);
-      if (settings.readingMode === "scroll") {
-        scrollToSegment(index);
-      } else {
-        const targetPage = Math.min(Math.floor(index / SEGMENTS_PER_PAGE), totalPages - 1);
-        setCurrentPage(targetPage);
-        setTimeout(() => scrollToSegment(index), 120);
+  const handleCharacterHighlight = useCallback(
+    (name: string, firstIndex: number) => {
+      if (activeCharacter === name) {
+        setActiveCharacter(null);
+        setHighlightSegmentIndex(null);
+        return;
       }
 
+      setActiveCharacter(name);
+      jumpToSegment(firstIndex, { highlightSearch: false });
       setInsightsOpen(false);
     },
-    [processedSegments, scrollToSegment, settings.readingMode, totalPages]
+    [activeCharacter, jumpToSegment]
+  );
+
+  const handleJumpToSegment = useCallback(
+    (index: number) => {
+      jumpToSegment(index, { highlightSearch: false });
+      setInsightsOpen(false);
+    },
+    [jumpToSegment]
   );
 
   const renderSegment = useCallback(
@@ -510,6 +521,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       const highlightable = isSegmentHighlightable(segment);
       const annotationHighlight = highlightable ? isHighlighted(index) : false;
       const searchHighlighted = highlightSegmentIndex === index;
+      const characterHighlighted =
+        highlightable && segment.type === "dialogue" && activeCharacter === segment.characterName;
       const highlighted = annotationHighlight || searchHighlighted;
       const showHighlightButton = highlightable && bookmarkMode;
 
@@ -538,11 +551,12 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
           <div
             key={index}
             data-segment-index={index}
-            className={cn(
-              "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
-              annotationHighlight && "reader-highlighted",
-              searchHighlighted && "reader-search-highlight"
-            )}
+          className={cn(
+            "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+            annotationHighlight && "reader-highlighted",
+            searchHighlighted && "reader-search-highlight",
+            characterHighlighted && "reader-character-highlight"
+          )}
           style={segmentStyle}
         >
           {highlightButton}
@@ -915,8 +929,13 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                           {insights.characters.map((character) => (
                             <button
                               key={character.name}
-                              onClick={() => handleJumpToSegment(character.firstIndex)}
-                              className="w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors hover:bg-[hsl(var(--color-accent))]"
+                              onClick={() => handleCharacterHighlight(character.name, character.firstIndex)}
+                              className={cn(
+                                "w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors",
+                                activeCharacter === character.name
+                                  ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))] text-[hsl(var(--color-primary))]"
+                                  : "hover:bg-[hsl(var(--color-accent))]"
+                              )}
                             >
                               <div className="font-medium">{character.name}</div>
                               <div className="text-xs text-[hsl(var(--color-muted-foreground))]">

@@ -11,10 +11,10 @@ import { useDataSyncManager } from "@/hooks/useDataSyncManager";
 const THEME_COLOR_OPTIONS = [
   {
     value: "default" as const,
-    label: "远航蓝",
-    description: "沉稳蓝白主色",
-    lightSwatch: "#4c6ef5",
-    darkSwatch: "#8a9dff",
+    label: "极光白",
+    description: "沉稳黑白主色",
+    lightSwatch: "#f5f5f5",
+    darkSwatch: "#1f1f21",
   },
   {
     value: "book" as const,
@@ -122,12 +122,6 @@ export function Settings() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500">
-        <div className="container flex items-center h-14">
-          <h1 className="text-lg font-semibold">设置</h1>
-        </div>
-      </header>
-
       <main className="flex-1 overflow-hidden">
         <CustomScrollArea
           className="h-full"

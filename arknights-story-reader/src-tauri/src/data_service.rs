@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
@@ -123,6 +124,50 @@ fn is_common_punctuation(ch: char) -> bool {
             | '﹕'
             | '︰'
     )
+}
+
+fn extract_numeric_parts(text: &str) -> Vec<i32> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+
+    for ch in text.chars() {
+        if ch.is_ascii_digit() {
+            current.push(ch);
+        } else if !current.is_empty() {
+            if let Ok(num) = current.parse::<i32>() {
+                parts.push(num);
+            }
+            current.clear();
+        }
+    }
+
+    if !current.is_empty() {
+        if let Ok(num) = current.parse::<i32>() {
+            parts.push(num);
+        }
+    }
+
+    parts
+}
+
+fn compare_story_group_ids(a: &str, b: &str) -> Ordering {
+    let mut a_parts = extract_numeric_parts(a);
+    let mut b_parts = extract_numeric_parts(b);
+
+    if !a_parts.is_empty() || !b_parts.is_empty() {
+        let len = a_parts.len().max(b_parts.len());
+        a_parts.resize(len, 0);
+        b_parts.resize(len, 0);
+
+        for (a_part, b_part) in a_parts.iter().zip(b_parts.iter()) {
+            match a_part.cmp(b_part) {
+                Ordering::Equal => continue,
+                non_eq => return non_eq,
+            }
+        }
+    }
+
+    a.cmp(b)
 }
 
 #[derive(Clone)]
@@ -744,18 +789,13 @@ impl DataService {
         self.finalize_manual_import(&temp_path, &app)
     }
 
-    pub fn import_zip_from_bytes(
-        &self,
-        data: &[u8],
-        app: AppHandle,
-    ) -> Result<(), String> {
+    pub fn import_zip_from_bytes(&self, data: &[u8], app: AppHandle) -> Result<(), String> {
         let parent_dir = self
             .data_dir
             .parent()
             .ok_or_else(|| "Invalid data directory".to_string())?;
 
-        fs::create_dir_all(parent_dir)
-            .map_err(|e| format!("无法创建数据目录: {}", e))?;
+        fs::create_dir_all(parent_dir).map_err(|e| format!("无法创建数据目录: {}", e))?;
 
         let temp_path = parent_dir.join("ArknightsGameData_import.zip");
         emit_progress(&app, "导入", 0, 100, "正在写入 ZIP 数据");
@@ -1256,10 +1296,7 @@ impl DataService {
         }
     }
 
-    pub fn search_stories_with_debug(
-        &self,
-        query: &str,
-    ) -> Result<SearchDebugResponse, String> {
+    pub fn search_stories_with_debug(&self, query: &str) -> Result<SearchDebugResponse, String> {
         let mut logs = Vec::new();
         let trimmed = query.trim();
         if trimmed.is_empty() {
@@ -1291,7 +1328,10 @@ impl DataService {
                             SEARCH_RESULT_LIMIT
                         ));
                     }
-                    logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
+                    logs.push(format!(
+                        "搜索总耗时 {} ms",
+                        start_time.elapsed().as_millis()
+                    ));
                     return Ok(SearchDebugResponse { results, logs });
                 }
             }
@@ -1323,7 +1363,10 @@ impl DataService {
                 SEARCH_RESULT_LIMIT
             ));
         }
-        logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
+        logs.push(format!(
+            "搜索总耗时 {} ms",
+            start_time.elapsed().as_millis()
+        ));
 
         Ok(SearchDebugResponse {
             results: fallback_results,
@@ -1410,7 +1453,7 @@ impl DataService {
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
 
         // 按分组ID收集主线剧情
-        let mut groups: HashMap<String, (String, Vec<StoryEntry>)> = HashMap::new();
+        let mut groups: Vec<(String, String, Vec<StoryEntry>)> = Vec::new();
 
         for (id, value) in data.iter() {
             if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
@@ -1432,36 +1475,18 @@ impl DataService {
                             }
                         }
                         stories.sort_by_key(|s| s.story_sort);
-                        groups.insert(id.clone(), (group_name.to_string(), stories));
+                        groups.push((id.clone(), group_name.to_string(), stories));
                     }
                 }
             }
         }
 
-        // 转换为有序列表（按ID排序）
-        let mut result: Vec<(String, Vec<StoryEntry>)> = groups
+        groups.sort_by(|a, b| compare_story_group_ids(&a.0, &b.0));
+
+        Ok(groups
             .into_iter()
-            .map(|(_, (name, stories))| (name, stories))
-            .collect();
-
-        result.sort_by(|a, b| {
-            // 提取章节号进行排序
-            let a_num =
-                a.0.chars()
-                    .filter(|c| c.is_numeric())
-                    .collect::<String>()
-                    .parse::<i32>()
-                    .unwrap_or(0);
-            let b_num =
-                b.0.chars()
-                    .filter(|c| c.is_numeric())
-                    .collect::<String>()
-                    .parse::<i32>()
-                    .unwrap_or(0);
-            a_num.cmp(&b_num)
-        });
-
-        Ok(result)
+            .map(|(_, name, stories)| (name, stories))
+            .collect())
     }
 
     pub fn get_activity_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
@@ -1479,7 +1504,7 @@ impl DataService {
         let data: HashMap<String, Value> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
 
-        let mut groups: Vec<(String, Vec<StoryEntry>)> = Vec::new();
+        let mut groups: Vec<(String, Vec<StoryEntry>, i64, String)> = Vec::new();
 
         for (_id, value) in data.iter() {
             if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
@@ -1503,17 +1528,42 @@ impl DataService {
 
                         if !stories.is_empty() {
                             stories.sort_by_key(|s| s.story_sort);
-                            groups.push((activity_name.to_string(), stories));
+                            let start_time = value
+                                .get("startTime")
+                                .and_then(|v| v.as_i64())
+                                .unwrap_or(i64::MAX);
+                            let normalized_start = if start_time <= 0 {
+                                i64::MAX
+                            } else {
+                                start_time
+                            };
+                            let sort_id = value
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or_else(|| _id.as_str());
+
+                            groups.push((
+                                activity_name.to_string(),
+                                stories,
+                                normalized_start,
+                                sort_id.to_string(),
+                            ));
                         }
                     }
                 }
             }
         }
 
-        // 按活动开始时间排序（最新的在前）
-        groups.sort_by(|a, b| b.0.cmp(&a.0));
+        // 按活动开始时间排序（旧活动在前，时间缺失的放在末尾）
+        groups.sort_by(|a, b| match a.2.cmp(&b.2) {
+            Ordering::Equal => compare_story_group_ids(&a.3, &b.3),
+            other => other,
+        });
 
-        Ok(groups)
+        Ok(groups
+            .into_iter()
+            .map(|(name, stories, _, _)| (name, stories))
+            .collect())
     }
 
     pub fn get_memory_stories(&self) -> Result<Vec<StoryEntry>, String> {

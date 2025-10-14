@@ -14,7 +14,7 @@ window.addEventListener('unhandledrejection', (event) => {
 
 console.log('[Main] 应用启动');
 console.log('[Main] 环境:', import.meta.env.MODE);
-console.log('[Main] Tauri 可用:', typeof window.__TAURI__ !== 'undefined');
+console.log('[Main] Tauri 可用:', "__TAURI__" in window);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

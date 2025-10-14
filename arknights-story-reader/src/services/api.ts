@@ -34,9 +34,8 @@ export const api = {
   syncData: async (): Promise<void> => {
     console.log("[API] 开始调用 sync_data 命令");
     try {
-      const result = await invoke("sync_data");
-      console.log("[API] sync_data 命令成功完成:", result);
-      return result;
+      await invoke<void>("sync_data");
+      console.log("[API] sync_data 命令成功完成");
     } catch (error) {
       console.error("[API] sync_data 命令失败:", error);
       throw error;
@@ -85,7 +84,7 @@ export const api = {
   // 手动导入ZIP（字节流）
   importZipFromBytes: async (bytes: Uint8Array): Promise<void> => {
     console.log("[API] 调用 import_from_zip_bytes, 大小:", bytes.byteLength);
-    return invoke("import_from_zip_bytes", { bytes });
+    return invoke<void>("import_from_zip_bytes", { bytes });
   },
 
   // 监听同步进度
