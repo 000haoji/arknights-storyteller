@@ -278,6 +278,13 @@ fn has_meaningful_content(text: &str) -> bool {
         return false;
     }
 
+    if trimmed.len() == 1 {
+        let ch = trimmed.chars().next().unwrap();
+        if ch.is_ascii_alphanumeric() && ch.is_ascii() {
+            return false;
+        }
+    }
+
     true
 }
 
@@ -443,7 +450,7 @@ mod tests {
 
         match &result.segments[1] {
             StorySegment::System { speaker, text } => {
-                assert_eq!(speaker.as_deref(), Some("sys"));
+                assert_eq!(speaker.as_deref(), Some("Sys"));
                 assert_eq!(text, "请尽可能多地与其他组织建立良好关系");
             }
             _ => panic!("Expected system segment"),

@@ -35,8 +35,8 @@ export function ReaderSettingsPanel({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-2 sm:px-0">
-      <Card className="w-full max-w-md mx-auto rounded-t-2xl sm:rounded-2xl sm:mb-4 overflow-hidden max-h-[90vh] flex flex-col shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-2 sm:px-0 animate-in fade-in-0 duration-300">
+      <Card className="w-full max-w-md mx-auto rounded-t-2xl sm:rounded-2xl sm:mb-4 overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col shadow-xl animate-in slide-in-from-bottom-10 duration-500 sm:zoom-in-95">
         <CardHeader className="flex flex-row items-center justify-between sticky top-0 z-10 bg-[hsl(var(--color-card))] border-b flex-shrink-0">
           <CardTitle>阅读设置</CardTitle>
           <div className="flex gap-2">
@@ -54,7 +54,7 @@ export function ReaderSettingsPanel({
             viewportClassName="reader-scroll"
             hideTrackWhenIdle={false}
           >
-            <div className="space-y-6 px-4 sm:px-6 py-6">
+            <div className="space-y-6 px-4 sm:px-6 py-6 pb-10">
               {/* 阅读模式 */}
               <div className="space-y-3">
                 <label className="text-sm font-medium">阅读模式</label>
@@ -63,7 +63,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={mode.value}
                       onClick={() => onUpdateSettings({ readingMode: mode.value })}
-                      className={`p-3 border rounded-lg text-sm transition-colors text-left ${
+                      className={`p-3 border rounded-lg text-sm transition-all duration-200 text-left hover:-translate-y-0.5 ${
                         settings.readingMode === mode.value
                           ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
                           : "border-[hsl(var(--color-border))]"
@@ -86,7 +86,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={theme.value}
                       onClick={() => onUpdateSettings({ theme: theme.value })}
-                      className={`p-3 rounded-lg border transition-colors text-left ${
+                      className={`p-3 rounded-lg border transition-all duration-200 text-left hover:-translate-y-0.5 ${
                         settings.theme === theme.value
                           ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
                           : "border-[hsl(var(--color-border))]"
@@ -114,7 +114,7 @@ export function ReaderSettingsPanel({
                     <button
                       key={font.value}
                       onClick={() => onUpdateSettings({ fontFamily: font.value })}
-                      className={`p-2 border rounded-md text-sm transition-colors ${
+                  className={`p-2 border rounded-md text-sm transition-all duration-200 hover:-translate-y-0.5 ${
                         settings.fontFamily === font.value
                           ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
                           : "border-[hsl(var(--color-border))]"

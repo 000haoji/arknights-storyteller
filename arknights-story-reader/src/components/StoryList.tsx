@@ -488,5 +488,5 @@ function StoryItem({
 }
 
 function EmptyState({ message }: { message: string }) {
-  return <div className="text-[hsl(var(--color-muted-foreground))]">{message}</div>;
+  return <div className="text-[hsl(var(--color-muted-foreground))] animate-in fade-in-0 duration-300">{message}</div>;
 }

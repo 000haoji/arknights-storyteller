@@ -343,7 +343,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-paragraph reader-dialogue"
+            className="reader-paragraph reader-dialogue animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing }}
           >
             <div className="reader-character-name">{segment.characterName}</div>
@@ -357,7 +357,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-narration"
+            className="reader-narration animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing }}
           >
             {renderLines(segment.text)}
@@ -370,12 +370,12 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-decision"
+            className="reader-decision animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing }}
           >
             <div className="reader-decision-title">选择：</div>
             {segment.options.map((option, optionIndex) => (
-              <div key={optionIndex} className="reader-decision-option">
+              <div key={optionIndex} className="reader-decision-option animate-in fade-in-0 duration-500" style={{ animationDelay: `${optionIndex * 60}ms` }}>
                 <span className="reader-decision-bullet">{optionIndex + 1}</span>
                 <span>{option}</span>
               </div>
@@ -389,7 +389,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-system"
+            className="reader-system animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing }}
           >
             {segment.speaker ? (
@@ -411,7 +411,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-subtitle"
+            className="reader-subtitle animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing, textAlign: alignment }}
           >
             {renderLines(segment.text)}
@@ -430,7 +430,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-sticker"
+            className="reader-sticker animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing, textAlign: alignment }}
           >
             {renderLines(segment.text)}
@@ -443,7 +443,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-header"
+            className="reader-header animate-in fade-in-0 duration-500"
             style={{ marginBottom: spacing }}
           >
             {segment.title}
@@ -491,10 +491,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   return (
     <div
       ref={readerRootRef}
-      className="h-full flex flex-col overflow-hidden reader-surface"
+      className="h-full flex flex-col overflow-hidden reader-surface animate-in fade-in-0 duration-500"
       data-reader-theme={settings.theme}
     >
-      <header className="flex-shrink-0 z-20 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
+      <header className="flex-shrink-0 z-20 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b animate-in fade-in-0 duration-500">
         <div className="container flex items-center gap-2 h-16">
           <Button variant="ghost" size="icon" onClick={onBack} aria-label="返回剧情列表">
             <ArrowLeft className="h-5 w-5" />
@@ -552,8 +552,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           )}
           viewportRef={scrollContainerRef}
         >
-          <div className="container py-8 pb-24">
-            <div className="reader-content" style={readerContentStyles}>
+          <div className="container py-8 pb-24 animate-in fade-in-0 duration-700">
+            <div className="reader-content animate-in fade-in-0 duration-700" style={readerContentStyles}>
               {renderableSegments.map((segment, idx) =>
                 renderSegment(segment, idx === renderableSegments.length - 1)
               )}
@@ -608,8 +608,8 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       {insightsOpen && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setInsightsOpen(false)} />
-          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[hsl(var(--color-background)/0.97)] border-l shadow-xl">
+          <div className="fixed inset-0 z-40 bg-black/40 animate-in fade-in-0 duration-300" onClick={() => setInsightsOpen(false)} />
+          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[hsl(var(--color-background)/0.97)] border-l shadow-xl animate-in slide-in-from-right-10 duration-300">
             <div className="h-full flex flex-col overflow-hidden">
               <div className="p-6 border-b">
                 <div className="flex items-center justify-between">
