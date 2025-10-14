@@ -3,6 +3,7 @@ import { api, SyncProgress } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Download, CheckCircle, AlertCircle } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 
 interface SyncDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
   const [currentVersion, setCurrentVersion] = useState<string>("");
   const [remoteVersion, setRemoteVersion] = useState<string>("");
   const [hasUpdate, setHasUpdate] = useState<boolean>(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     console.log("[SyncDialog] 对话框打开状态变化:", open);
@@ -193,6 +195,42 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
                   ? "开始同步" 
                   : "已是最新"
               }
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  setImporting(true);
+                  console.log("[SyncDialog] 手动导入 ZIP");
+                  const file = await open({
+                    filters: [{ name: "ZIP", extensions: ["zip"] }],
+                    multiple: false,
+                  });
+                  if (!file) {
+                    console.log("[SyncDialog] 用户取消导入");
+                    return;
+                  }
+                  setProgress({
+                    phase: "导入",
+                    current: 0,
+                    total: 100,
+                    message: "正在导入...",
+                  });
+                  await api.importFromZip(file as string);
+                  console.log("[SyncDialog] 导入完成");
+                  onSuccess();
+                  await loadVersionInfo();
+                } catch (err) {
+                  console.error("[SyncDialog] 导入失败", err);
+                  setError(err instanceof Error ? err.message : "导入失败");
+                } finally {
+                  setImporting(false);
+                }
+              }}
+              disabled={syncing || importing}
+              className="flex-1"
+            >
+              {importing ? "导入中..." : "导入ZIP"}
             </Button>
           </div>
         </CardContent>

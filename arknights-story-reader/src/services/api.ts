@@ -5,6 +5,7 @@ import type {
   Chapter,
   ParsedStoryContent,
   SearchResult,
+  StoryEntry,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -79,6 +80,12 @@ export const api = {
     }
   },
 
+  // 手动导入ZIP
+  importFromZip: async (path: string): Promise<void> => {
+    console.log("[API] 调用 import_from_zip", path);
+    return invoke("import_from_zip", { path });
+  },
+
   // 监听同步进度
   onSyncProgress: (callback: (progress: SyncProgress) => void) => {
     console.log("[API] 开始监听 sync-progress 事件");
@@ -111,6 +118,12 @@ export const api = {
   // 搜索剧情
   searchStories: async (query: string): Promise<SearchResult[]> => {
     return invoke("search_stories", { query });
+  },
+
+  // 获取活动剧情
+  getActivityStories: async (): Promise<StoryEntry[]> => {
+    console.log("[API] 调用 get_activity_stories");
+    return invoke("get_activity_stories");
   },
 };
 

@@ -35,6 +35,8 @@ pub fn run() {
             commands::get_remote_version,
             commands::check_update,
             commands::is_installed,
+            commands::get_activity_stories,
+            commands::import_from_zip,
             commands::get_chapters,
             commands::get_story_categories,
             commands::get_story_content,

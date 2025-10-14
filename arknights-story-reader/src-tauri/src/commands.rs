@@ -1,5 +1,5 @@
 use crate::data_service::DataService;
-use crate::models::{Chapter, ParsedStoryContent, SearchResult, StoryCategory};
+use crate::models::{Chapter, ParsedStoryContent, SearchResult, StoryCategory, StoryEntry};
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
@@ -99,4 +99,20 @@ pub async fn search_stories(
 ) -> Result<Vec<SearchResult>, String> {
     let service = lock_service(&state.data_service);
     service.search_stories(&query)
+}
+
+#[tauri::command]
+pub async fn import_from_zip(app: AppHandle, state: State<'_, AppState>, path: String) -> Result<(), String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.import_zip_from_path(path, app))
+        .await
+        .map_err(|err| format!("Failed to join import task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_activity_stories(state: State<'_, AppState>) -> Result<Vec<StoryEntry>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_activity_stories())
+        .await
+        .map_err(|err| format!("Failed to join activity stories task: {}", err))?
 }

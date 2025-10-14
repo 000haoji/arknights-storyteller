@@ -240,7 +240,7 @@ impl DataService {
 
         let download_url = format!("{}/{}", REPO_DOWNLOAD_URL, reference);
         eprintln!("[SYNC] download_url: {}", download_url);
-        emit_progress(app, "下载", 0, 1, format!("从 {} 下载", reference));
+        emit_progress(app, "下载", 0, 100, format!("从 {} 下载", reference));
 
         eprintln!("[SYNC] 发起 HTTP GET 请求");
         let mut response = client.get(&download_url).send().map_err(|e| {
@@ -271,21 +271,45 @@ impl DataService {
                 .write_all(&buffer[..bytes_read])
                 .map_err(|e| format!("Failed to write zip data: {}", e))?;
             downloaded += bytes_read;
-            let total = if total_bytes == 0 { 1 } else { total_bytes };
+
+            let percent = if total_bytes > 0 {
+                (downloaded as f64 / total_bytes as f64 * 100.0).min(100.0)
+            } else {
+                0.0
+            };
+            let downloaded_mb = downloaded as f64 / 1_048_576.0;
+            let total_mb = total_bytes as f64 / 1_048_576.0;
+            let message = if total_bytes > 0 {
+                format!("已下载 {:.1}/{:.1} MB", downloaded_mb, total_mb.max(0.1))
+            } else {
+                format!("已下载 {:.1} MB", downloaded_mb)
+            };
             emit_progress(
                 app,
                 "下载",
-                downloaded,
-                total,
-                format!("已下载 {:.1}%", (downloaded as f64 / total as f64) * 100.0),
+                percent.round() as usize,
+                100,
+                message,
             );
         }
         zip_file
             .flush()
             .map_err(|e| format!("Failed to flush zip file: {}", e))?;
 
-        emit_progress(app, "解压", 0, 1, "正在解压数据");
+        emit_progress(app, "下载", 100, 100, "下载完成");
+        self.extract_zip_at(&zip_path, parent_dir, app)?;
+        fs::remove_file(&zip_path).ok();
 
+        Ok(())
+    }
+
+    fn extract_zip_at(
+        &self,
+        zip_path: &Path,
+        parent_dir: &Path,
+        app: &AppHandle,
+    ) -> Result<(), String> {
+        emit_progress(app, "解压", 0, 100, "正在解压数据");
         let extract_root = parent_dir.join("ArknightsGameData_extract");
         if extract_root.exists() {
             fs::remove_dir_all(&extract_root)
@@ -294,13 +318,13 @@ impl DataService {
         fs::create_dir_all(&extract_root)
             .map_err(|e| format!("Failed to create extract dir: {}", e))?;
 
-        let zip_file = fs::File::open(&zip_path)
+        let zip_file = fs::File::open(zip_path)
             .map_err(|e| format!("Failed to open downloaded zip: {}", e))?;
-        let mut archive =
-            ZipArchive::new(zip_file).map_err(|e| format!("Failed to read zip archive: {}", e))?;
+        let mut archive = ZipArchive::new(zip_file)
+            .map_err(|e| format!("Failed to read zip archive: {}", e))?;
 
-        let total_entries = archive.len();
-        for i in 0..total_entries {
+        let total_entries = usize::max(archive.len(), 1);
+        for i in 0..archive.len() {
             let mut file = archive
                 .by_index(i)
                 .map_err(|e| format!("Failed to access zip entry: {}", e))?;
@@ -324,16 +348,18 @@ impl DataService {
                     .map_err(|e| format!("Failed to write file: {}", e))?;
             }
 
+            let percent = ((i + 1) as f64 / total_entries as f64 * 100.0).min(100.0);
             emit_progress(
                 app,
                 "解压",
-                i + 1,
-                total_entries,
-                format!("解压 {}/{}", i + 1, total_entries),
+                percent.round() as usize,
+                100,
+                format!("解压 {}/{} ({:.1}%)", i + 1, total_entries, percent),
             );
         }
 
-        // 找到解压后的根目录（zip 默认包含一个根目录）
+        emit_progress(app, "解压", 100, 100, "解压完成");
+
         let extracted_root = fs::read_dir(&extract_root)
             .map_err(|e| format!("Failed to read extracted directory: {}", e))?
             .filter_map(|entry| entry.ok())
@@ -355,8 +381,44 @@ impl DataService {
         }
 
         fs::remove_dir_all(&extract_root).ok();
-        fs::remove_file(&zip_path).ok();
+        Ok(())
+    }
 
+    pub fn import_zip_from_path<P: AsRef<Path>>(
+        &self,
+        source: P,
+        app: AppHandle,
+    ) -> Result<(), String> {
+        let source_path = source.as_ref();
+        if !source_path.exists() {
+            return Err("ZIP 文件不存在".to_string());
+        }
+
+        let parent_dir = self
+            .data_dir
+            .parent()
+            .ok_or_else(|| "Invalid data directory".to_string())?;
+
+        let temp_path = parent_dir.join("ArknightsGameData_import.zip");
+        emit_progress(&app, "导入", 0, 100, "正在复制 ZIP 文件");
+        fs::copy(source_path, &temp_path)
+            .map_err(|e| format!("复制 ZIP 文件失败: {}", e))?;
+
+        emit_progress(&app, "导入", 30, 100, "正在校验 ZIP 文件");
+        self.extract_zip_at(&temp_path, parent_dir, &app)?;
+        fs::remove_file(&temp_path).ok();
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let info = VersionInfo {
+            commit: format!("manual-{}", timestamp),
+            fetched_at: timestamp,
+        };
+        self.write_version(&info)?;
+
+        emit_progress(&app, "完成", 100, 100, "导入完成");
         Ok(())
     }
 
@@ -588,5 +650,20 @@ impl DataService {
         } else {
             String::new()
         }
+    }
+
+    pub fn get_activity_stories(&self) -> Result<Vec<StoryEntry>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+        let activities = self.get_activities()?;
+        let mut stories = Vec::new();
+        for activity in activities {
+            for story in activity.info_unlock_datas {
+                stories.push(story);
+            }
+        }
+        stories.sort_by_key(|s| s.story_sort);
+        Ok(stories)
     }
 }
