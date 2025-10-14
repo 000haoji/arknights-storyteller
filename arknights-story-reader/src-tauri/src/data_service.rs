@@ -1944,24 +1944,39 @@ impl DataService {
             .map_err(|e| format!("Failed to parse story review meta data: {}", e))?;
 
         let mut path_desc_map: HashMap<String, String> = HashMap::new();
-        if let Some(avgs) = meta_value
-            .get("actArchiveData")
-            .and_then(|v| v.get("avgs"))
-            .and_then(|v| v.as_object())
-        {
-            for (_k, v) in avgs.iter() {
-                if let Some(cp) = v.get("contentPath").and_then(|x| x.as_str()) {
-                    let lower = cp.to_ascii_lowercase();
-                    if lower.starts_with("obt/roguelike/") {
-                        if let Some(desc) = v.get("desc").and_then(|x| x.as_str()) {
-                            if !desc.trim().is_empty() {
-                                path_desc_map.insert(lower, desc.to_string());
+        // 广义扫描：meta 中所有含 contentPath 的对象都尝试收集（兼容结构变动）
+        fn collect_content_paths(map: &mut HashMap<String, String>, val: &Value) {
+            match val {
+                Value::Object(obj) => {
+                    if let Some(cp) = obj.get("contentPath").and_then(|x| x.as_str()) {
+                        let lower = cp.to_ascii_lowercase();
+                        if lower.starts_with("obt/roguelike/") {
+                            let desc = obj
+                                .get("desc")
+                                .and_then(|x| x.as_str())
+                                .or_else(|| obj.get("name").and_then(|x| x.as_str()))
+                                .or_else(|| obj.get("rawBrief").and_then(|x| x.as_str()))
+                                .unwrap_or("")
+                                .trim()
+                                .to_string();
+                            if !desc.is_empty() {
+                                map.insert(lower, desc);
                             }
                         }
                     }
+                    for v in obj.values() {
+                        collect_content_paths(map, v);
+                    }
                 }
+                Value::Array(arr) => {
+                    for v in arr {
+                        collect_content_paths(map, v);
+                    }
+                }
+                _ => {}
             }
         }
+        collect_content_paths(&mut path_desc_map, &meta_value);
 
         // 使用 story_table 作为权威来源，枚举所有 Obt/Roguelike 文本
         let story_table_file = self

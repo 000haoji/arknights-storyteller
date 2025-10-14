@@ -104,8 +104,8 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
       memoryStories.forEach((s, idx) => {
         groupInfo.set(s.storyId, {
           category: "memory",
-          groupName: "追忆集",
-          groupOrder: idx, // 追忆集整体作为一组，这里顺序意义不大
+          groupName: "干员密录",
+          groupOrder: idx, // 干员密录整体作为一组，这里顺序意义不大
           storyOrder: s.storySort,
         });
       });

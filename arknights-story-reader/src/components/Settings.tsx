@@ -376,6 +376,10 @@ export function Settings() {
                   <span>1.0.0</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-[hsl(var(--color-muted-foreground))]">作者</span>
+                  <span className="text-sm">helix</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-[hsl(var(--color-muted-foreground))]">数据来源</span>
                   <span className="text-sm">ArknightsGameData</span>
                 </div>

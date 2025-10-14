@@ -85,6 +85,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const readerRootRef = useRef<HTMLDivElement | null>(null);
   const focusAppliedRef = useRef<number | null>(null);
   const characterAppliedRef = useRef<string | null>(null);
+  const pendingScrollIndexRef = useRef<number | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
@@ -253,6 +254,16 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       const queryNoSpaces = normalizedQuery.replace(/\s+/g, "");
       const snippetNoSpaces = normalizedSnippet?.replace(/\s+/g, "");
 
+      // 更强健的匹配：移除标点/符号后再匹配一次
+      const stripSymbols = (s: string) =>
+        s
+          .normalize("NFKC")
+          .toLowerCase()
+          // 移除所有标点、符号以及空白
+          .replace(/[\p{P}\p{S}\s]+/gu, "");
+      const queryStripped = normalizedQuery ? stripSymbols(normalizedQuery) : "";
+      const snippetStripped = normalizedSnippet ? stripSymbols(normalizedSnippet) : "";
+
       if (!normalizedQuery && !normalizedSnippet) {
         return null;
       }
@@ -263,12 +274,17 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         if (!text) continue;
         const normalizedText = text.replace(/\s+/g, " ").toLowerCase();
         const collapsedText = normalizedText.replace(/\s+/g, "");
+        const strippedText = stripSymbols(text);
 
         if (normalizedSnippet && (normalizedText.includes(normalizedSnippet) || collapsedText.includes(snippetNoSpaces ?? ""))) {
           return i;
         }
 
         if (normalizedQuery && (normalizedText.includes(normalizedQuery) || collapsedText.includes(queryNoSpaces))) {
+          return i;
+        }
+
+        if ((snippetStripped && strippedText.includes(snippetStripped)) || (queryStripped && strippedText.includes(queryStripped))) {
           return i;
         }
       }
@@ -287,12 +303,35 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       );
       if (!element) return;
 
-      if (settings.readingMode === "scroll") {
-        const offset = Math.max(element.offsetTop - 32, 0);
-        container.scrollTo({ top: offset, behavior });
-      } else {
+      const doScroll = (top: number) => container.scrollTo({ top: Math.max(top, 0), behavior });
+
+      // 路径1：几何位置（大多数布局准确）
+      try {
+        const cRect = container.getBoundingClientRect();
+        const eRect = element.getBoundingClientRect();
+        const targetTop = container.scrollTop + (eRect.top - cRect.top) - 32;
+        if (Number.isFinite(targetTop)) {
+          doScroll(targetTop);
+          return;
+        }
+      } catch {}
+
+      // 路径2：累计 offsetTop（兜底）
+      try {
+        let top = 0;
+        let node: HTMLElement | null = element;
+        while (node && node !== container) {
+          top += node.offsetTop;
+          node = node.offsetParent as HTMLElement | null;
+        }
+        doScroll(top - 32);
+        return;
+      } catch {}
+
+      // 路径3：scrollIntoView 兜底
+      try {
         element.scrollIntoView({ behavior, block: "start" });
-      }
+      } catch {}
     },
     [settings.readingMode]
   );
@@ -502,16 +541,41 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         setHighlightSegmentIndex(null);
       }
 
+      pendingScrollIndexRef.current = index;
       if (settings.readingMode === "scroll") {
+        // 直接尝试一次，若元素未渲染，layout effect 会再次兜底
         scrollToSegment(index);
       } else {
         const targetPage = Math.min(Math.floor(index / SEGMENTS_PER_PAGE), totalPages - 1);
         setCurrentPage(targetPage);
-        setTimeout(() => scrollToSegment(index), 120);
       }
     },
     [processedSegments, scrollToSegment, settings.readingMode, totalPages]
   );
+
+  // 当页面或段落渲染完成后，执行挂起的滚动请求（最多尝试几次）
+  useLayoutEffect(() => {
+    if (pendingScrollIndexRef.current === null) return;
+    let tries = 0;
+    const tick = () => {
+      const index = pendingScrollIndexRef.current;
+      if (index === null) return;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const element = container.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
+      if (element) {
+        // 找到了目标元素，执行滚动
+        scrollToSegment(index);
+        pendingScrollIndexRef.current = null;
+        return;
+      }
+      if (tries < 6) {
+        tries += 1;
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  }, [renderableSegments, currentPage, settings.readingMode, scrollToSegment]);
 
   useEffect(() => {
     if (!initialFocus || !processedSegments.length) return;
@@ -809,16 +873,6 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                 )}
                 {storyEntry.avgTag && (
                   <span className="px-1.5 py-0.5 rounded bg-[hsl(var(--color-accent))]">{storyEntry.avgTag}</span>
-                )}
-                {storyEntry.unLockType && (
-                  <span>解锁：{storyEntry.unLockType}</span>
-                )}
-                {Array.isArray(storyEntry.requiredStages) && storyEntry.requiredStages.length > 0 && (
-                  <span>
-                    需求：
-                    {storyEntry.requiredStages.slice(0, 2).map((r) => r.stageId).join(" / ")}
-                    {storyEntry.requiredStages.length > 2 ? ' …' : ''}
-                  </span>
                 )}
               </div>
             )}

@@ -178,7 +178,7 @@ export const api = {
     return invoke("get_roguelike_stories_grouped");
   },
 
-  // 获取追忆集（干员密录）
+  // 获取干员密录（原追忆集）
   getMemoryStories: async (): Promise<StoryEntry[]> => {
     console.log("[API] 调用 get_memory_stories");
     return invoke("get_memory_stories");

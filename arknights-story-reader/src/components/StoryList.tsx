@@ -15,7 +15,7 @@ const CATEGORY_TABS = [
   { id: "activity" as const, label: "活动剧情" },
   { id: "sidestory" as const, label: "支线" },
   { id: "roguelike" as const, label: "肉鸽" },
-  { id: "memory" as const, label: "追忆集" },
+  { id: "memory" as const, label: "干员密录" },
 ];
 
 const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "sidestory" | "roguelike" | "memory", string> = {
@@ -132,18 +132,24 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   }, [hasSearch, mainGrouped, matchesSearch, normalizedSearch]);
 
   const filteredActivityGrouped = useMemo(() => {
-    if (!hasSearch) return activityGrouped;
-    return activityGrouped
+    const sidestoryNames = new Set(sidestoryGrouped.map(([name]) => name));
+    const base = activityGrouped
+      .filter(([activityName]) => {
+        // 在非搜索模式下，活动里隐藏已被“支线”收纳的分组
+        if (!hasSearch && sidestoryNames.has(activityName)) return false;
+        return true;
+      })
       .map(([activityName, stories]) => {
         const activityMatches = activityName.toLowerCase().includes(normalizedSearch);
-        if (activityMatches) {
+        if (activityMatches || !hasSearch) {
           return [activityName, stories] as [string, StoryEntry[]];
         }
         const filteredStories = stories.filter(matchesSearch);
         return [activityName, filteredStories] as [string, StoryEntry[]];
       })
       .filter(([, stories]) => stories.length > 0);
-  }, [activityGrouped, hasSearch, matchesSearch, normalizedSearch]);
+    return base;
+  }, [activityGrouped, hasSearch, matchesSearch, normalizedSearch, sidestoryGrouped]);
 
   const filteredSidestoryGrouped = useMemo(() => {
     if (!hasSearch) return sidestoryGrouped;
@@ -382,6 +388,8 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   useEffect(() => {
     if (activeCategory === 'activity') {
       void loadActivities();
+      // 为了去重，确保同时加载支线
+      void loadSidestories();
     } else if (activeCategory === 'sidestory') {
       void loadSidestories();
     } else if (activeCategory === 'roguelike') {
@@ -451,7 +459,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
   const loadMemories = async () => {
     if (memoryLoaded) return;
-    console.log("[StoryList] 开始加载追忆集");
+    console.log("[StoryList] 开始加载干员密录");
     try {
       setMemoryLoading(true);
       setError(null);
@@ -464,12 +472,12 @@ export function StoryList({ onSelectStory }: StoryListProps) {
         });
 
       const data = await withTimeout(api.getMemoryStories());
-      console.log("[StoryList] 追忆集加载成功，数量:", data.length);
+      console.log("[StoryList] 干员密录加载成功，数量:", data.length);
       setMemoryStories(data);
       setMemoryLoaded(true);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "加载失败";
-      console.error("[StoryList] 加载追忆集失败:", errorMsg, err);
+      console.error("[StoryList] 加载干员密录失败:", errorMsg, err);
       if (errorMsg.includes("NOT_INSTALLED") || errorMsg.includes("No such file") || errorMsg === "TIMEOUT") {
         setError("未安装或网络缓慢，请先同步数据");
         setSyncDialogOpen(true);
@@ -753,10 +761,10 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
               {activeCategory === "memory" && (
                 <div className="space-y-2">
-                  {memoryLoading && <EmptyState message="追忆集加载中..." />}
+                  {memoryLoading && <EmptyState message="干员密录加载中..." />}
                   {!memoryLoading && filteredMemoryStories.length === 0 && (
                     <EmptyState
-                      message={hasSearch ? "没有匹配的追忆剧情" : "暂无追忆集或需要同步"}
+                      message={hasSearch ? "没有匹配的密录剧情" : "暂无干员密录或需要同步"}
                     />
                   )}
                   {!memoryLoading &&
