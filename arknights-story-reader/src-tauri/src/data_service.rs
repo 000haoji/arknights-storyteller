@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use reqwest::blocking::Client;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -11,7 +11,8 @@ use tauri::{AppHandle, Emitter};
 use zip::ZipArchive;
 
 use crate::models::{
-    Activity, Chapter, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus, StorySegment,
+    Activity, Chapter, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
+    StoryIndexStatus, StorySegment,
 };
 use crate::parser::parse_story_text;
 
@@ -32,6 +33,13 @@ struct SyncProgress {
 struct VersionInfo {
     commit: String,
     fetched_at: i64,
+}
+
+#[derive(Clone)]
+struct IndexedStory {
+    category_name: String,
+    entry_type: String,
+    story: StoryEntry,
 }
 
 fn emit_progress(
@@ -74,6 +82,46 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn is_common_punctuation(ch: char) -> bool {
+    if ch.is_ascii_punctuation() {
+        return true;
+    }
+
+    matches!(
+        ch,
+        '，' | '、'
+            | '。'
+            | '！'
+            | '？'
+            | '：'
+            | '；'
+            | '（'
+            | '）'
+            | '【'
+            | '】'
+            | '「'
+            | '」'
+            | '『'
+            | '』'
+            | '《'
+            | '》'
+            | '〈'
+            | '〉'
+            | '—'
+            | '～'
+            | '…'
+            | '·'
+            | '﹑'
+            | '﹔'
+            | '﹗'
+            | '﹖'
+            | '﹐'
+            | '﹒'
+            | '﹕'
+            | '︰'
+    )
 }
 
 #[derive(Clone)]
@@ -154,6 +202,95 @@ impl DataService {
         Ok(())
     }
 
+    fn entry_type_display(entry_type: &str) -> String {
+        match entry_type {
+            "MAINLINE" => "主线".to_string(),
+            "ACTIVITY" | "MINI_ACTIVITY" => "活动".to_string(),
+            "ROGUELIKE" => "肉鸽".to_string(),
+            "SIDESTORY" => "支线".to_string(),
+            "NONE" => "干员密录".to_string(),
+            _ => entry_type.to_string(),
+        }
+    }
+
+    fn resolve_category_name(entry_type: &str, entry_id: &str, value: &Value) -> String {
+        if let Some(name) = value
+            .get("name")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return name.to_string();
+        }
+
+        let display = Self::entry_type_display(entry_type);
+        if display == entry_type {
+            format!("{} ({})", entry_type, entry_id)
+        } else {
+            format!("{} ({})", display, entry_id)
+        }
+    }
+
+    fn format_category_label(entry_type: &str, category_name: &str) -> String {
+        let prefix = Self::entry_type_display(entry_type);
+        let name = category_name.trim();
+        if name.is_empty() || name == prefix {
+            prefix
+        } else {
+            format!("{} | {}", prefix, name)
+        }
+    }
+
+    fn collect_stories_for_index(&self) -> Result<Vec<IndexedStory>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let mut seen_ids = HashSet::new();
+        let mut stories = Vec::new();
+
+        for (entry_id, value) in data.iter() {
+            let entry_type = value
+                .get("entryType")
+                .and_then(|v| v.as_str())
+                .unwrap_or("UNKNOWN");
+
+            let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) else {
+                continue;
+            };
+
+            let category_name = Self::resolve_category_name(entry_type, entry_id, value);
+
+            for unlock_data in unlock_datas {
+                if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                    if story.story_txt.trim().is_empty() {
+                        continue;
+                    }
+                    if seen_ids.insert(story.story_id.clone()) {
+                        stories.push(IndexedStory {
+                            category_name: category_name.clone(),
+                            entry_type: entry_type.to_string(),
+                            story,
+                        });
+                    }
+                }
+            }
+        }
+
+        stories.sort_by(|a, b| a.story.story_id.cmp(&b.story.story_id));
+        Ok(stories)
+    }
+
     fn flatten_segments(segments: &[StorySegment]) -> String {
         let mut parts = Vec::with_capacity(segments.len());
         for segment in segments {
@@ -192,11 +329,23 @@ impl DataService {
             }
 
             if !ascii_buffer.is_empty() {
-                tokens.push(ascii_buffer.clone());
-                ascii_buffer.clear();
+                let token = std::mem::take(&mut ascii_buffer);
+                tokens.push(token);
             }
 
             if ch.is_whitespace() {
+                continue;
+            }
+
+            if is_common_punctuation(ch) {
+                continue;
+            }
+
+            if ch.is_alphanumeric() {
+                let token: String = ch.to_lowercase().collect();
+                if !token.is_empty() {
+                    tokens.push(token);
+                }
                 continue;
             }
 
@@ -543,6 +692,34 @@ impl DataService {
         Ok(())
     }
 
+    fn finalize_manual_import(&self, temp_path: &Path, app: &AppHandle) -> Result<(), String> {
+        let parent_dir = self
+            .data_dir
+            .parent()
+            .ok_or_else(|| "Invalid data directory".to_string())?;
+
+        emit_progress(app, "导入", 40, 100, "正在解压 ZIP 文件");
+        self.extract_zip_at(temp_path, parent_dir, app)?;
+        fs::remove_file(temp_path).ok();
+
+        if let Err(err) = self.clear_story_index() {
+            eprintln!("[IMPORT] Failed to reset story index: {}", err);
+        }
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let info = VersionInfo {
+            commit: format!("manual-{}", timestamp),
+            fetched_at: timestamp,
+        };
+        self.write_version(&info)?;
+
+        emit_progress(app, "完成", 100, 100, "导入完成");
+        Ok(())
+    }
+
     pub fn import_zip_from_path<P: AsRef<Path>>(
         &self,
         source: P,
@@ -563,25 +740,28 @@ impl DataService {
         fs::copy(source_path, &temp_path).map_err(|e| format!("复制 ZIP 文件失败: {}", e))?;
 
         emit_progress(&app, "导入", 30, 100, "正在校验 ZIP 文件");
-        self.extract_zip_at(&temp_path, parent_dir, &app)?;
-        fs::remove_file(&temp_path).ok();
+        self.finalize_manual_import(&temp_path, &app)
+    }
 
-        if let Err(err) = self.clear_story_index() {
-            eprintln!("[IMPORT] Failed to reset story index: {}", err);
-        }
+    pub fn import_zip_from_bytes(
+        &self,
+        data: &[u8],
+        app: AppHandle,
+    ) -> Result<(), String> {
+        let parent_dir = self
+            .data_dir
+            .parent()
+            .ok_or_else(|| "Invalid data directory".to_string())?;
 
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let info = VersionInfo {
-            commit: format!("manual-{}", timestamp),
-            fetched_at: timestamp,
-        };
-        self.write_version(&info)?;
+        fs::create_dir_all(parent_dir)
+            .map_err(|e| format!("无法创建数据目录: {}", e))?;
 
-        emit_progress(&app, "完成", 100, 100, "导入完成");
-        Ok(())
+        let temp_path = parent_dir.join("ArknightsGameData_import.zip");
+        emit_progress(&app, "导入", 0, 100, "正在写入 ZIP 数据");
+        fs::write(&temp_path, data).map_err(|e| format!("写入 ZIP 数据失败: {}", e))?;
+
+        emit_progress(&app, "导入", 30, 100, "正在校验 ZIP 文件");
+        self.finalize_manual_import(&temp_path, &app)
     }
 
     fn version_file_path(&self) -> PathBuf {
@@ -822,7 +1002,7 @@ impl DataService {
         tx.execute("DELETE FROM story_index", [])
             .map_err(|e| format!("Failed to clear story index: {}", e))?;
 
-        let categories = self.get_story_categories()?;
+        let indexed_stories = self.collect_stories_for_index()?;
         let mut insert_stmt = tx
             .prepare(
                 "
@@ -839,48 +1019,49 @@ impl DataService {
 
         let mut total = 0usize;
 
-        for category in categories {
-            for story in category.stories {
-                let story_id = story.story_id.clone();
-                let story_name = story.story_name.clone();
-                let story_path = story.story_txt.clone();
+        for indexed in &indexed_stories {
+            let story_id = &indexed.story.story_id;
+            let story_name = &indexed.story.story_name;
+            let story_path = &indexed.story.story_txt;
 
-                let raw_text = match self.read_story_text(&story_path) {
-                    Ok(text) => text,
-                    Err(err) => {
-                        eprintln!(
-                            "[INDEX] Skip story {}: failed to read text ({})",
-                            story_id, err
-                        );
-                        continue;
-                    }
-                };
-
-                let parsed = parse_story_text(&raw_text);
-                let flattened = Self::flatten_segments(&parsed.segments);
-
-                let combined_raw = if flattened.trim().is_empty() {
-                    story_name.clone()
-                } else {
-                    format!("{}\n{}", story_name, flattened)
-                };
-
-                let tokenized = Self::build_tokenized_content(&combined_raw);
-                if tokenized.trim().is_empty() {
+            let raw_text = match self.read_story_text(story_path) {
+                Ok(text) => text,
+                Err(err) => {
+                    eprintln!(
+                        "[INDEX] Skip story {}: failed to read text ({})",
+                        story_id, err
+                    );
                     continue;
                 }
+            };
 
-                insert_stmt
-                    .execute(params![
-                        story_id,
-                        story_name,
-                        category.name,
-                        tokenized,
-                        combined_raw
-                    ])
-                    .map_err(|e| format!("Failed to insert story into index: {}", e))?;
-                total += 1;
+            let parsed = parse_story_text(&raw_text);
+            let flattened = Self::flatten_segments(&parsed.segments);
+
+            let combined_raw = if flattened.trim().is_empty() {
+                story_name.clone()
+            } else {
+                format!("{}\n{}", story_name, flattened)
+            };
+
+            let tokenized = Self::build_tokenized_content(&combined_raw);
+            if tokenized.trim().is_empty() {
+                continue;
             }
+
+            let category_label =
+                Self::format_category_label(&indexed.entry_type, &indexed.category_name);
+
+            insert_stmt
+                .execute(params![
+                    story_id,
+                    story_name,
+                    &category_label,
+                    tokenized,
+                    combined_raw
+                ])
+                .map_err(|e| format!("Failed to insert story into index: {}", e))?;
+            total += 1;
         }
 
         drop(insert_stmt);
@@ -967,6 +1148,7 @@ impl DataService {
             SELECT story_id, story_name, category, raw_content
             FROM story_index
             WHERE story_index MATCH ?1
+            ORDER BY bm25(story_index)
             LIMIT 100
         ",
             )
@@ -1011,30 +1193,32 @@ impl DataService {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
 
-        let categories = self.get_story_categories()?;
+        let stories = self.collect_stories_for_index()?;
 
-        for category in categories {
-            for story in category.stories {
-                if story.story_name.to_lowercase().contains(&query_lower) {
+        for indexed in &stories {
+            let story = &indexed.story;
+            let category_label =
+                Self::format_category_label(&indexed.entry_type, &indexed.category_name);
+
+            if story.story_name.to_lowercase().contains(&query_lower) {
+                results.push(SearchResult {
+                    story_id: story.story_id.clone(),
+                    story_name: story.story_name.clone(),
+                    matched_text: story.story_name.clone(),
+                    category: category_label,
+                });
+                continue;
+            }
+
+            if let Ok(content) = self.read_story_text(&story.story_txt) {
+                if content.to_lowercase().contains(&query_lower) {
+                    let matched_text = self.extract_context(&content, &query_lower);
                     results.push(SearchResult {
                         story_id: story.story_id.clone(),
                         story_name: story.story_name.clone(),
-                        matched_text: story.story_name.clone(),
-                        category: category.name.clone(),
+                        matched_text,
+                        category: category_label,
                     });
-                    continue;
-                }
-
-                if let Ok(content) = self.read_story_text(&story.story_txt) {
-                    if content.to_lowercase().contains(&query_lower) {
-                        let matched_text = self.extract_context(&content, &query_lower);
-                        results.push(SearchResult {
-                            story_id: story.story_id,
-                            story_name: story.story_name,
-                            matched_text,
-                            category: category.name.clone(),
-                        });
-                    }
                 }
             }
         }
@@ -1050,13 +1234,7 @@ impl DataService {
         }
 
         match self.search_stories_with_index(trimmed) {
-            Ok(Some(results)) => {
-                if results.is_empty() {
-                    self.search_stories_fallback(trimmed)
-                } else {
-                    Ok(results)
-                }
-            }
+            Ok(Some(results)) => Ok(results),
             Ok(None) => self.search_stories_fallback(trimmed),
             Err(err) => {
                 eprintln!(

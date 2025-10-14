@@ -24,7 +24,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [memoryStories, setMemoryStories] = useState<StoryEntry[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryLoaded, setMemoryLoaded] = useState(false);
-  const { favorites, isFavorite, toggleFavorite } = useFavorites();
+  const { favorites, isFavorite, toggleFavorite, isGroupFavorite, toggleFavoriteGroup } = useFavorites();
 
   const favoriteEntries = useMemo(() => Object.values(favorites), [favorites]);
 
@@ -270,25 +270,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 顶部操作栏 */}
-      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500">
-        <div className="container flex items-center justify-between h-14">
-          <h1 className="text-lg font-semibold">明日方舟剧情</h1>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              console.log("[StoryList] 点击同步按钮，打开对话框");
-              setSyncDialogOpen(true);
-            }}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            同步
-          </Button>
-        </div>
-      </header>
-
-      {/* 分类列表 */}
       <main className="flex-1 overflow-hidden">
         <CustomScrollArea
           className="h-full"
@@ -340,19 +321,34 @@ export function StoryList({ onSelectStory }: StoryListProps) {
             <div className="mt-4 space-y-4">
               {activeCategory === "main" && (
                 mainGrouped.length > 0 ? (
-                  mainGrouped.map(([chapterName, stories], index) => (
-                    <Collapsible key={`chapter-${index}`} title={chapterName} defaultOpen={index === 0}>
-                      {stories.map((story) => (
-                        <StoryItem
-                          key={story.storyId}
-                          story={story}
-                          onSelectStory={onSelectStory}
-                          isFavorite={isFavorite(story.storyId)}
-                          onToggleFavorite={() => toggleFavorite(story)}
-                        />
-                      ))}
-                    </Collapsible>
-                  ))
+                  mainGrouped.map(([chapterName, stories], index) => {
+                    const chapterFavorite = isGroupFavorite(stories);
+                    return (
+                      <Collapsible
+                        key={`chapter-${index}`}
+                        title={chapterName}
+                        defaultOpen={index === 0}
+                        actions={
+                          <GroupFavoriteButton
+                            isFavorite={chapterFavorite}
+                            onToggle={() => toggleFavoriteGroup(stories)}
+                            inactiveText="收藏章节"
+                            activeText="取消收藏章节"
+                          />
+                        }
+                      >
+                        {stories.map((story) => (
+                          <StoryItem
+                            key={story.storyId}
+                            story={story}
+                            onSelectStory={onSelectStory}
+                            isFavorite={isFavorite(story.storyId)}
+                            onToggleFavorite={() => toggleFavorite(story)}
+                          />
+                        ))}
+                      </Collapsible>
+                    );
+                  })
                 ) : (
                   <EmptyState message="暂无主线剧情，可能需要同步。" />
                 )
@@ -365,19 +361,34 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                     <EmptyState message="暂无活动剧情或需要同步" />
                   )}
                   {!activityLoading &&
-                    activityGrouped.map(([activityName, stories], index) => (
-                      <Collapsible key={`activity-${index}`} title={activityName} defaultOpen={index === 0}>
-                        {stories.map((story) => (
-                          <StoryItem
-                            key={story.storyId}
-                            story={story}
-                            onSelectStory={onSelectStory}
-                            isFavorite={isFavorite(story.storyId)}
-                            onToggleFavorite={() => toggleFavorite(story)}
-                          />
-                        ))}
-                      </Collapsible>
-                    ))}
+                    activityGrouped.map(([activityName, stories], index) => {
+                      const activityFavorite = isGroupFavorite(stories);
+                      return (
+                        <Collapsible
+                          key={`activity-${index}`}
+                          title={activityName}
+                          defaultOpen={index === 0}
+                          actions={
+                            <GroupFavoriteButton
+                              isFavorite={activityFavorite}
+                              onToggle={() => toggleFavoriteGroup(stories)}
+                              inactiveText="收藏活动"
+                              activeText="取消收藏活动"
+                            />
+                          }
+                        >
+                          {stories.map((story) => (
+                            <StoryItem
+                              key={story.storyId}
+                              story={story}
+                              onSelectStory={onSelectStory}
+                              isFavorite={isFavorite(story.storyId)}
+                              onToggleFavorite={() => toggleFavorite(story)}
+                            />
+                          ))}
+                        </Collapsible>
+                      );
+                    })}
                 </div>
               )}
 
@@ -402,19 +413,33 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
               {activeCategory === "favorites" && (
                 favoriteEntries.length > 0 ? (
-                  favoriteGroups.map(({ groupKey, displayName, stories }, index) => (
-                    <Collapsible key={`favorite-${groupKey}`} title={displayName} defaultOpen={index === 0}>
-                      {stories.map((story) => (
-                        <StoryItem
-                          key={`favorite-${story.storyId}`}
-                          story={story}
-                          onSelectStory={onSelectStory}
-                          isFavorite={true}
-                          onToggleFavorite={() => toggleFavorite(story)}
-                        />
-                      ))}
-                    </Collapsible>
-                  ))
+                  favoriteGroups.map(({ groupKey, displayName, stories }, index) => {
+                    return (
+                      <Collapsible
+                        key={`favorite-${groupKey}`}
+                        title={displayName}
+                        defaultOpen={index === 0}
+                        actions={
+                          <GroupFavoriteButton
+                            isFavorite
+                            onToggle={() => toggleFavoriteGroup(stories)}
+                            inactiveText="收藏该组"
+                            activeText="取消收藏该组"
+                          />
+                        }
+                      >
+                        {stories.map((story) => (
+                          <StoryItem
+                            key={`favorite-${story.storyId}`}
+                            story={story}
+                            onSelectStory={onSelectStory}
+                            isFavorite={true}
+                            onToggleFavorite={() => toggleFavorite(story)}
+                          />
+                        ))}
+                      </Collapsible>
+                    );
+                  })
                 ) : (
                   <EmptyState message="暂无收藏的剧情" />
                 )
@@ -456,6 +481,45 @@ function CategoryCard({
     >
       <h2 className="text-xl font-semibold mb-1">{title}</h2>
       <p className="text-sm text-[hsl(var(--color-muted-foreground))]">{description}</p>
+    </button>
+  );
+}
+
+function GroupFavoriteButton({
+  isFavorite,
+  onToggle,
+  inactiveText,
+  activeText,
+}: {
+  isFavorite: boolean;
+  onToggle: () => void;
+  inactiveText: string;
+  activeText: string;
+}) {
+  const label = isFavorite ? activeText : inactiveText;
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle();
+      }}
+      aria-pressed={isFavorite}
+      aria-label={label}
+      className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors ${
+        isFavorite
+          ? "text-[hsl(var(--color-primary))] border-[hsl(var(--color-primary)/0.4)] bg-[hsl(var(--color-primary)/0.08)]"
+          : "text-[hsl(var(--color-muted-foreground))] border-[hsl(var(--color-border))] bg-transparent hover:bg-[hsl(var(--color-accent))] hover:text-[hsl(var(--color-foreground))]"
+      }`}
+    >
+      <Star
+        className="h-3.5 w-3.5"
+        fill={isFavorite ? "currentColor" : "transparent"}
+        strokeWidth={isFavorite ? 0 : 2}
+      />
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 }

@@ -13,7 +13,7 @@ export interface ReaderSettings {
 }
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  fontFamily: "system",
+  fontFamily: "'Noto Serif SC', 'Source Han Serif SC', serif",
   fontSize: 18,
   lineHeight: 1.8,
   letterSpacing: 0,
@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   pageWidth: 100, // 100%
   textAlign: 'justify',
   theme: 'default',
-  readingMode: 'paged',
+  readingMode: 'scroll',
 };
 
 const STORAGE_KEY = "reader-settings";
@@ -55,10 +55,15 @@ export function useReaderSettings() {
 }
 
 export const FONT_FAMILIES = [
-  { value: "system", label: "系统默认" },
+  { value: "'Noto Serif SC', 'Source Han Serif SC', serif", label: "思源宋体" },
+  { value: "'Noto Sans SC', 'Source Han Sans SC', sans-serif", label: "思源黑体" },
+  { value: "'LXGW WenKai', 'Noto Serif SC', serif", label: "霞鹜文楷" },
+  { value: "'ZCOOL XiaoWei', 'Noto Serif SC', serif", label: "站酷小薇" },
+  { value: "'Smiley Sans', 'Noto Sans SC', sans-serif", label: "得意黑" },
+  { value: "'Fira Sans', 'Source Sans Pro', 'Noto Sans', sans-serif", label: "Fira Sans" },
   { value: "'Songti SC', 'STSong', serif", label: "宋体" },
   { value: "'Heiti SC', 'STHeiti', sans-serif", label: "黑体" },
   { value: "'Kaiti SC', 'STKaiti', serif", label: "楷体" },
   { value: "'PingFang SC', -apple-system, sans-serif", label: "苹方" },
-  { value: "'Noto Serif SC', serif", label: "思源宋体" },
+  { value: "system", label: "系统默认" },
 ];

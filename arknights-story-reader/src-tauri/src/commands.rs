@@ -132,6 +132,18 @@ pub async fn import_from_zip(
 }
 
 #[tauri::command]
+pub async fn import_from_zip_bytes(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    bytes: Vec<u8>,
+) -> Result<(), String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.import_zip_from_bytes(&bytes, app))
+        .await
+        .map_err(|err| format!("Failed to join import-bytes task: {}", err))?
+}
+
+#[tauri::command]
 pub async fn get_main_stories_grouped(
     state: State<'_, AppState>,
 ) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {

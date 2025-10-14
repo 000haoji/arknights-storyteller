@@ -10,13 +10,6 @@ const READING_MODES: Array<{ value: Settings["readingMode"]; label: string; desc
     { value: "paged", label: "章节分页", description: "按页分段阅读，便于快速定位" },
   ];
 
-const THEMES: Array<{ value: Settings["theme"]; label: string; accent: string }> = [
-  { value: "default", label: "极简白", accent: "#4c6ef5" },
-  { value: "sepia", label: "羊皮纸", accent: "#c97b35" },
-  { value: "green", label: "护眼绿", accent: "#3a7d44" },
-  { value: "dark", label: "沉浸夜", accent: "#7dd3fc" },
-];
-
 interface ReaderSettingsProps {
   open: boolean;
   settings: Settings;
@@ -35,86 +28,61 @@ export function ReaderSettingsPanel({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 px-2 sm:px-0 animate-in fade-in-0 duration-300">
-      <Card className="w-full max-w-md mx-auto rounded-t-2xl sm:rounded-2xl sm:mb-4 overflow-hidden max-h-[calc(100vh-2rem)] flex flex-col shadow-xl animate-in slide-in-from-bottom-10 duration-500 sm:zoom-in-95">
-        <CardHeader className="flex flex-row items-center justify-between sticky top-0 z-10 bg-[hsl(var(--color-card))] border-b flex-shrink-0">
-          <CardTitle>阅读设置</CardTitle>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="icon" onClick={onReset}>
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={onClose}>
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex-1 p-0">
-          <CustomScrollArea
-            className="h-full"
-            viewportClassName="reader-scroll"
-            hideTrackWhenIdle={false}
-          >
-            <div className="space-y-6 px-4 sm:px-6 py-6 pb-10">
-              {/* 阅读模式 */}
-              <div className="space-y-3">
-                <label className="text-sm font-medium">阅读模式</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {READING_MODES.map((mode) => (
-                    <button
-                      key={mode.value}
-                      onClick={() => onUpdateSettings({ readingMode: mode.value })}
-                      className={`p-3 border rounded-lg text-sm transition-all duration-200 text-left hover:-translate-y-0.5 ${
-                        settings.readingMode === mode.value
-                          ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
-                          : "border-[hsl(var(--color-border))]"
-                      }`}
-                    >
-                      <div className="font-medium">{mode.label}</div>
-                      <div className="text-xs text-[hsl(var(--color-muted-foreground))] mt-1 leading-relaxed">
-                        {mode.description}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 主题 */}
-              <div className="space-y-3">
-                <label className="text-sm font-medium">阅读主题</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {THEMES.map((theme) => (
-                    <button
-                      key={theme.value}
-                      onClick={() => onUpdateSettings({ theme: theme.value })}
-                      className={`p-3 rounded-lg border transition-all duration-200 text-left hover:-translate-y-0.5 ${
-                        settings.theme === theme.value
-                          ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
-                          : "border-[hsl(var(--color-border))]"
-                      }`}
-                    >
-                      <div
-                        className="font-medium"
-                        style={{ color: settings.theme === theme.value ? theme.accent : undefined }}
+    <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0 bg-black/45" onClick={onClose} />
+      <div className="ml-auto h-full w-full max-w-md sm:max-w-lg relative animate-in slide-in-from-right-10 duration-300">
+        <Card className="relative z-10 h-full rounded-none sm:rounded-l-2xl flex flex-col shadow-2xl border-l border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between sticky top-0 z-10 bg-[hsl(var(--color-card))] border-b flex-shrink-0 px-4 sm:px-6 py-3 sm:py-4">
+            <CardTitle className="text-lg font-semibold">阅读设置</CardTitle>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="icon" onClick={onReset}>
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={onClose}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 min-h-0 p-0">
+            <CustomScrollArea
+              className="h-full min-h-0"
+              viewportClassName="reader-scroll"
+              hideTrackWhenIdle={false}
+            >
+              <div className="space-y-6 px-4 sm:px-6 py-6 pb-10">
+                {/* 阅读模式 */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium">阅读模式</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {READING_MODES.map((mode) => (
+                      <button
+                        key={mode.value}
+                        onClick={() => onUpdateSettings({ readingMode: mode.value })}
+                        className={`p-3 border rounded-lg text-sm transition-all duration-200 text-left hover:-translate-y-0.5 ${
+                          settings.readingMode === mode.value
+                            ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
+                            : "border-[hsl(var(--color-border))]"
+                        }`}
                       >
-                        {theme.label}
-                      </div>
-                      <div className="text-[10px] uppercase tracking-widest opacity-70 mt-1">
-                        {theme.value}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="font-medium">{mode.label}</div>
+                        <div className="text-xs text-[hsl(var(--color-muted-foreground))] mt-1 leading-relaxed">
+                          {mode.description}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
               {/* 字体选择 */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">字体</label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {FONT_FAMILIES.map((font) => (
                     <button
                       key={font.value}
                       onClick={() => onUpdateSettings({ fontFamily: font.value })}
-                  className={`p-2 border rounded-md text-sm transition-all duration-200 hover:-translate-y-0.5 ${
+                      className={`p-2 border rounded-md text-sm transition-all duration-200 hover:-translate-y-0.5 ${
                         settings.fontFamily === font.value
                           ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
                           : "border-[hsl(var(--color-border))]"
@@ -258,10 +226,10 @@ export function ReaderSettingsPanel({
                   </button>
                 </div>
               </div>
-            </div>
-          </CustomScrollArea>
-        </CardContent>
-      </Card>
+            </CustomScrollArea>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

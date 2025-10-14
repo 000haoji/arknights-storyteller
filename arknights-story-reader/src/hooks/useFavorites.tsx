@@ -15,6 +15,8 @@ interface FavoritesContextValue {
   favorites: FavoritesMap;
   isFavorite: (storyId: string) => boolean;
   toggleFavorite: (story: StoryEntry) => void;
+  isGroupFavorite: (stories: StoryEntry[]) => boolean;
+  toggleFavoriteGroup: (stories: StoryEntry[]) => void;
 }
 
 const STORAGE_KEY = "arknights-story-favorites";
@@ -69,13 +71,40 @@ export function FavoritesProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const isGroupFavorite = useCallback(
+    (stories: StoryEntry[]) => stories.every((story) => Boolean(favorites[story.storyId])),
+    [favorites]
+  );
+
+  const toggleFavoriteGroup = useCallback((stories: StoryEntry[]) => {
+    setFavorites((prev) => {
+      const allFavorite = stories.every((story) => Boolean(prev[story.storyId]));
+
+      if (allFavorite) {
+        const next = { ...prev };
+        stories.forEach((story) => {
+          delete next[story.storyId];
+        });
+        return next;
+      }
+
+      const next = { ...prev };
+      stories.forEach((story) => {
+        next[story.storyId] = story;
+      });
+      return next;
+    });
+  }, []);
+
   const value = useMemo<FavoritesContextValue>(
     () => ({
       favorites,
       isFavorite,
       toggleFavorite,
+      isGroupFavorite,
+      toggleFavoriteGroup,
     }),
-    [favorites, isFavorite, toggleFavorite]
+    [favorites, isFavorite, toggleFavorite, isGroupFavorite, toggleFavoriteGroup]
   );
 
   return <FavoritesContext.Provider value={value}>{children}</FavoritesContext.Provider>;

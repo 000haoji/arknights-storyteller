@@ -2,7 +2,8 @@
 
 @variant dark (.dark &);
 
-@theme {
+:root,
+:root[data-theme-color="default"] {
   --color-background: 0 0% 100%;
   --color-foreground: 222.2 84% 4.9%;
   --color-card: 0 0% 100%;
@@ -23,6 +24,72 @@
   --color-input: 214.3 31.8% 91.4%;
   --color-ring: 222.2 84% 4.9%;
   --radius: 0.5rem;
+}
+
+:root[data-theme-color="book"] {
+  --color-background: 36 43% 96%;
+  --color-foreground: 26 32% 24%;
+  --color-card: 36 43% 96%;
+  --color-card-foreground: 26 32% 24%;
+  --color-popover: 36 43% 96%;
+  --color-popover-foreground: 26 32% 24%;
+  --color-primary: 24 66% 45%;
+  --color-primary-foreground: 36 22% 95%;
+  --color-secondary: 35 55% 90%;
+  --color-secondary-foreground: 26 32% 24%;
+  --color-muted: 33 40% 90%;
+  --color-muted-foreground: 24 22% 40%;
+  --color-accent: 35 60% 92%;
+  --color-accent-foreground: 26 32% 24%;
+  --color-destructive: 6 72% 45%;
+  --color-destructive-foreground: 36 22% 95%;
+  --color-border: 33 28% 82%;
+  --color-input: 33 28% 82%;
+  --color-ring: 24 66% 45%;
+}
+
+:root[data-theme-color="emerald"] {
+  --color-background: 152 38% 96%;
+  --color-foreground: 163 28% 24%;
+  --color-card: 152 38% 96%;
+  --color-card-foreground: 163 28% 24%;
+  --color-popover: 152 38% 96%;
+  --color-popover-foreground: 163 28% 24%;
+  --color-primary: 153 51% 36%;
+  --color-primary-foreground: 150 40% 94%;
+  --color-secondary: 150 34% 91%;
+  --color-secondary-foreground: 163 28% 24%;
+  --color-muted: 152 32% 90%;
+  --color-muted-foreground: 160 22% 40%;
+  --color-accent: 150 30% 88%;
+  --color-accent-foreground: 163 28% 24%;
+  --color-destructive: 0 78% 52%;
+  --color-destructive-foreground: 150 40% 94%;
+  --color-border: 154 28% 82%;
+  --color-input: 154 28% 82%;
+  --color-ring: 153 51% 36%;
+}
+
+:root[data-theme-color="noctilucent"] {
+  --color-background: 248 60% 97%;
+  --color-foreground: 250 32% 26%;
+  --color-card: 248 60% 97%;
+  --color-card-foreground: 250 32% 26%;
+  --color-popover: 248 60% 97%;
+  --color-popover-foreground: 250 32% 26%;
+  --color-primary: 258 68% 52%;
+  --color-primary-foreground: 250 52% 96%;
+  --color-secondary: 246 52% 93%;
+  --color-secondary-foreground: 250 32% 26%;
+  --color-muted: 246 45% 92%;
+  --color-muted-foreground: 255 22% 42%;
+  --color-accent: 248 52% 90%;
+  --color-accent-foreground: 250 32% 26%;
+  --color-destructive: 0 84% 58%;
+  --color-destructive-foreground: 250 52% 96%;
+  --color-border: 246 38% 84%;
+  --color-input: 246 38% 84%;
+  --color-ring: 258 68% 52%;
 }
 
 :root.dark,
@@ -48,8 +115,80 @@
   --color-ring: 212.7 26.8% 83.9%;
 }
 
+.dark[data-theme-color="book"],
+:root.dark[data-theme-color="book"] {
+  --color-background: 26 24% 13%;
+  --color-foreground: 36 35% 91%;
+  --color-card: 26 24% 13%;
+  --color-card-foreground: 36 35% 91%;
+  --color-popover: 26 24% 13%;
+  --color-popover-foreground: 36 35% 91%;
+  --color-primary: 32 74% 70%;
+  --color-primary-foreground: 24 48% 18%;
+  --color-secondary: 28 20% 20%;
+  --color-secondary-foreground: 36 35% 91%;
+  --color-muted: 28 20% 20%;
+  --color-muted-foreground: 28 18% 67%;
+  --color-accent: 28 22% 22%;
+  --color-accent-foreground: 36 35% 91%;
+  --color-destructive: 3 70% 46%;
+  --color-destructive-foreground: 24 48% 18%;
+  --color-border: 28 20% 20%;
+  --color-input: 28 20% 20%;
+  --color-ring: 32 74% 70%;
+}
+
+.dark[data-theme-color="emerald"],
+:root.dark[data-theme-color="emerald"] {
+  --color-background: 157 24% 13%;
+  --color-foreground: 150 42% 90%;
+  --color-card: 157 24% 13%;
+  --color-card-foreground: 150 42% 90%;
+  --color-popover: 157 24% 13%;
+  --color-popover-foreground: 150 42% 90%;
+  --color-primary: 151 46% 58%;
+  --color-primary-foreground: 158 28% 12%;
+  --color-secondary: 158 22% 19%;
+  --color-secondary-foreground: 150 42% 90%;
+  --color-muted: 158 22% 19%;
+  --color-muted-foreground: 152 26% 70%;
+  --color-accent: 156 24% 22%;
+  --color-accent-foreground: 150 42% 90%;
+  --color-destructive: 3 80% 50%;
+  --color-destructive-foreground: 158 28% 12%;
+  --color-border: 158 22% 19%;
+  --color-input: 158 22% 19%;
+  --color-ring: 151 46% 58%;
+}
+
+.dark[data-theme-color="noctilucent"],
+:root.dark[data-theme-color="noctilucent"] {
+  --color-background: 257 32% 16%;
+  --color-foreground: 250 48% 94%;
+  --color-card: 257 32% 16%;
+  --color-card-foreground: 250 48% 94%;
+  --color-popover: 257 32% 16%;
+  --color-popover-foreground: 250 48% 94%;
+  --color-primary: 265 72% 72%;
+  --color-primary-foreground: 255 46% 18%;
+  --color-secondary: 255 30% 24%;
+  --color-secondary-foreground: 250 48% 94%;
+  --color-muted: 255 30% 24%;
+  --color-muted-foreground: 262 32% 76%;
+  --color-accent: 258 32% 26%;
+  --color-accent-foreground: 250 48% 94%;
+  --color-destructive: 358 78% 60%;
+  --color-destructive-foreground: 255 46% 18%;
+  --color-border: 255 30% 24%;
+  --color-input: 255 30% 24%;
+  --color-ring: 265 72% 72%;
+}
+
 * {
   border-color: hsl(var(--color-border));
+}
+html, body {
+  overflow: hidden;
 }
 
 html, body, #root {
@@ -184,6 +323,52 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.reader-segment {
+  position: relative;
+  padding-right: clamp(2rem, 4vw, 2.75rem);
+}
+
+.reader-highlight-toggle {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--color-border));
+  background: hsl(var(--color-card) / 0.92);
+  color: hsl(var(--color-muted-foreground));
+  box-shadow: 0 6px 18px hsl(var(--color-border) / 0.28);
+  opacity: 0.35;
+  transition: opacity 0.2s ease, transform 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.reader-highlight-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.reader-segment:hover .reader-highlight-toggle,
+.reader-segment:focus-within .reader-highlight-toggle,
+.reader-highlighted .reader-highlight-toggle {
+  opacity: 1;
+}
+
+.reader-highlight-toggle.is-active {
+  background: hsl(var(--color-primary) / 0.18);
+  color: hsl(var(--color-primary));
+  border-color: hsl(var(--color-primary) / 0.45);
+  box-shadow: 0 6px 20px hsl(var(--color-primary) / 0.25);
+}
+
+.reader-highlighted {
+  background: linear-gradient(135deg, hsl(var(--color-accent) / 0.55), hsl(var(--color-card) / 0.95));
+  box-shadow: 0 12px 30px hsl(var(--color-accent) / 0.3);
+  border-radius: 0.9rem;
+}
+
 .reader-subtitle {
   margin-bottom: 1.5rem;
   font-style: italic;
@@ -291,9 +476,12 @@ input[type="range"] {
   appearance: none;
   background: transparent;
   cursor: pointer;
+  width: 100%;
+  height: 1.5rem;
+  display: block;
 }
 
-input[type="range"]::-webkit-slider-track {
+input[type="range"]::-webkit-slider-runnable-track {
   background: hsl(var(--color-secondary));
   height: 0.5rem;
   border-radius: 0.25rem;
@@ -311,6 +499,12 @@ input[type="range"]::-webkit-slider-thumb {
 
 input[type="range"]::-moz-range-track {
   background: hsl(var(--color-secondary));
+  height: 0.5rem;
+  border-radius: 0.25rem;
+}
+
+input[type="range"]::-moz-range-progress {
+  background: hsl(var(--color-primary) / 0.65);
   height: 0.5rem;
   border-radius: 0.25rem;
 }

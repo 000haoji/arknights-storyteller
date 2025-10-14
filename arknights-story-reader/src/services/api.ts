@@ -81,10 +81,10 @@ export const api = {
     }
   },
 
-  // 手动导入ZIP
-  importFromZip: async (path: string): Promise<void> => {
-    console.log("[API] 调用 import_from_zip", path);
-    return invoke("import_from_zip", { path });
+  // 手动导入ZIP（字节流）
+  importZipFromBytes: async (bytes: Uint8Array): Promise<void> => {
+    console.log("[API] 调用 import_from_zip_bytes, 大小:", bytes.byteLength);
+    return invoke("import_from_zip_bytes", { bytes });
   },
 
   // 监听同步进度

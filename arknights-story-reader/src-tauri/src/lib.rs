@@ -13,6 +13,7 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -39,6 +40,7 @@ pub fn run() {
             commands::get_activity_stories_grouped,
             commands::get_memory_stories,
             commands::import_from_zip,
+            commands::import_from_zip_bytes,
             commands::get_chapters,
             commands::get_story_categories,
             commands::get_story_content,

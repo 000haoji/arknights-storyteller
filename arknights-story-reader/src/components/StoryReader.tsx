@@ -12,20 +12,24 @@ import type { ParsedStoryContent, StorySegment } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
+  BookmarkCheck,
+  BookmarkPlus,
   ChevronLeft,
   ChevronRight,
   ListTree,
   Maximize2,
   Minimize2,
-  ScrollText,
   Settings as SettingsIcon,
+  Trash2,
 } from "lucide-react";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { ReaderSettingsPanel } from "@/components/ReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useFullscreen } from "@/hooks/useFullscreen";
+import { useHighlights } from "@/hooks/useHighlights";
 import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface StoryReaderProps {
   storyPath: string;
@@ -40,6 +44,19 @@ interface RenderableSegment {
 
 const SEGMENTS_PER_PAGE = 12;
 const BASE_MAX_WIDTH = 768; // px
+
+function isSegmentHighlightable(segment: StorySegment): boolean {
+  switch (segment.type) {
+    case "dialogue":
+    case "narration":
+    case "system":
+    case "subtitle":
+    case "sticker":
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) {
   const [content, setContent] = useState<ParsedStoryContent | null>(null);
@@ -56,6 +73,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
 
   const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
@@ -108,6 +126,41 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
     return merged;
   }, [content]);
+
+  const highlightEntries = useMemo(
+    () =>
+      highlights
+        .map((segmentIndex) => {
+          const segment = processedSegments[segmentIndex];
+          if (!segment) return null;
+
+          let preview = "";
+          switch (segment.type) {
+            case "dialogue": {
+              const primary = segment.text.split("\n")[0] ?? "";
+              preview = `${segment.characterName}: ${primary}`;
+              break;
+            }
+            case "narration":
+            case "system":
+            case "subtitle":
+            case "sticker":
+              preview = segment.text.split("\n")[0] ?? "";
+              break;
+            default:
+              return null;
+          }
+
+          const normalized = preview.replace(/\s+/g, " ").trim();
+          if (!normalized) {
+            return null;
+          }
+          const label = normalized.length > 70 ? `${normalized.slice(0, 70)}…` : normalized;
+          return { index: segmentIndex, label };
+        })
+        .filter((entry): entry is { index: number; label: string } => entry !== null),
+    [highlights, processedSegments]
+  );
 
   const totalPages = useMemo(() => {
     if (!processedSegments.length) return 0;
@@ -311,9 +364,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
   const handleJumpToSegment = useCallback(
     (index: number) => {
-    if (!processedSegments.length) return;
-    if (settings.readingMode === "scroll") {
-      const el = document.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
+      if (!processedSegments.length) return;
+
+      if (settings.readingMode === "scroll") {
+        const el = document.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
         }
@@ -321,31 +375,45 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
         const targetPage = Math.min(Math.floor(index / SEGMENTS_PER_PAGE), totalPages - 1);
         setCurrentPage(targetPage);
       }
+
       setInsightsOpen(false);
     },
     [processedSegments, settings.readingMode, totalPages]
   );
 
-  const handleScrollToTop = useCallback(() => {
-    if (settings.readingMode === "scroll") {
-      scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      setCurrentPage(0);
-    }
-  }, [settings.readingMode]);
-
   const renderSegment = useCallback(
     ({ segment, index }: RenderableSegment, isLast: boolean) => {
       const spacing = isLast ? "0" : readerSpacing;
+      const highlightable = isSegmentHighlightable(segment);
+      const highlighted = highlightable ? isHighlighted(index) : false;
+
+      const highlightButton = highlightable ? (
+        <button
+          type="button"
+          className={cn("reader-highlight-toggle", highlighted && "is-active")}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            toggleHighlight(index);
+          }}
+          aria-label={highlighted ? "取消划线收藏" : "划线收藏"}
+        >
+          {highlighted ? <BookmarkCheck className="h-4 w-4" /> : <BookmarkPlus className="h-4 w-4" />}
+        </button>
+      ) : null;
 
       if (segment.type === "dialogue") {
         return (
           <div
             key={index}
             data-segment-index={index}
-            className="reader-paragraph reader-dialogue motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              highlighted && "reader-highlighted"
+            )}
             style={{ marginBottom: spacing }}
           >
+            {highlightButton}
             <div className="reader-character-name">{segment.characterName}</div>
             <div className="reader-text">{renderLines(segment.text)}</div>
           </div>
@@ -357,9 +425,13 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-narration motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-narration reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              highlighted && "reader-highlighted"
+            )}
             style={{ marginBottom: spacing }}
           >
+            {highlightButton}
             {renderLines(segment.text)}
           </div>
         );
@@ -375,7 +447,11 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           >
             <div className="reader-decision-title">选择：</div>
             {segment.options.map((option, optionIndex) => (
-              <div key={optionIndex} className="reader-decision-option motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500" style={{ animationDelay: `${optionIndex * 60}ms` }}>
+              <div
+                key={optionIndex}
+                className="reader-decision-option motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+                style={{ animationDelay: `${optionIndex * 60}ms` }}
+              >
                 <span className="reader-decision-bullet">{optionIndex + 1}</span>
                 <span>{option}</span>
               </div>
@@ -389,9 +465,13 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-system motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-system reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              highlighted && "reader-highlighted"
+            )}
             style={{ marginBottom: spacing }}
           >
+            {highlightButton}
             {segment.speaker ? (
               <div className="reader-system-speaker">{segment.speaker}</div>
             ) : null}
@@ -411,9 +491,13 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-subtitle motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-subtitle reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              highlighted && "reader-highlighted"
+            )}
             style={{ marginBottom: spacing, textAlign: alignment }}
           >
+            {highlightButton}
             {renderLines(segment.text)}
           </div>
         );
@@ -430,9 +514,13 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
           <div
             key={index}
             data-segment-index={index}
-            className="reader-sticker motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+            className={cn(
+              "reader-sticker reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
+              highlighted && "reader-highlighted"
+            )}
             style={{ marginBottom: spacing, textAlign: alignment }}
           >
+            {highlightButton}
             {renderLines(segment.text)}
           </div>
         );
@@ -453,7 +541,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       return null;
     },
-    [readerSpacing, renderLines]
+    [isHighlighted, readerSpacing, renderLines, toggleHighlight]
   );
 
   if (loading) {
@@ -590,113 +678,156 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
         </footer>
       )}
 
-      <div className="fixed bottom-20 right-4 z-40 flex flex-col gap-3">
-        <Button
-          variant="secondary"
-          size="icon"
-          onClick={handleScrollToTop}
-          aria-label="返回顶部"
-        >
-          <ScrollText className="h-4 w-4" />
-        </Button>
-        {settings.readingMode === "scroll" && (
-          <div className="rounded-full bg-[hsl(var(--color-background)/0.85)] border px-3 py-1 text-xs shadow-sm text-[hsl(var(--color-foreground))]">
-            {progressPercentage}% 已读
-          </div>
-        )}
-      </div>
-
       {insightsOpen && (
         <>
-          <div className="fixed inset-0 z-40 bg-black/40 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300" onClick={() => setInsightsOpen(false)} />
-          <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[hsl(var(--color-background)/0.97)] border-l shadow-xl motion-safe:animate-in motion-safe:slide-in-from-right-10 motion-safe:duration-300">
-            <div className="h-full flex flex-col overflow-hidden">
-              <div className="p-6 border-b">
-                <div className="flex items-center justify-between">
+          <div
+            className="fixed inset-0 z-40 bg-black/40 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300"
+            onClick={() => setInsightsOpen(false)}
+          />
+          <aside className="fixed inset-0 z-50 flex">
+            <div className="ml-auto h-full w-full max-w-sm sm:max-w-md relative motion-safe:animate-in motion-safe:slide-in-from-right-10 motion-safe:duration-300">
+              <Card className="relative z-10 h-full rounded-none sm:rounded-l-2xl flex flex-col shadow-2xl border-l border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] overflow-hidden">
+                <CardHeader className="flex flex-row items-start justify-between gap-4 sticky top-0 bg-[hsl(var(--color-card))] border-b px-5 sm:px-6 py-4">
                   <div>
-                    <div className="text-sm uppercase tracking-widest text-[hsl(var(--color-muted-foreground))]">
+                    <div className="text-xs uppercase tracking-widest text-[hsl(var(--color-muted-foreground))]">
                       Story Guide
                     </div>
-                    <h2 className="text-lg font-semibold mt-1">剧情导览</h2>
+                    <CardTitle className="text-lg font-semibold mt-1">剧情导览</CardTitle>
+                    <p className="mt-2 text-sm text-[hsl(var(--color-muted-foreground))] leading-relaxed max-w-xs">
+                      快速定位关键角色与抉择节点，辅助你以导演视角重温剧情。
+                    </p>
                   </div>
                   <Button variant="ghost" size="icon" onClick={() => setInsightsOpen(false)}>
                     <ArrowLeft className="h-5 w-5 rotate-180" />
                   </Button>
-                </div>
-                <p className="mt-3 text-sm text-[hsl(var(--color-muted-foreground))] leading-relaxed">
-                  快速定位关键角色与抉择节点，辅助你以导演视角重温剧情。
-                </p>
-              </div>
-
-              <CustomScrollArea className="flex-1" viewportClassName="reader-scroll" hideTrackWhenIdle={false}>
-                <div className="p-6 space-y-8">
-                  <section>
-                    <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
-                      角色出场
-                    </h3>
-                    <div className="space-y-2">
-                      {insights.characters.length === 0 && (
-                        <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                          暂无角色统计
-                        </div>
-                      )}
-                      {insights.characters.map((character) => (
-                        <button
-                          key={character.name}
-                          onClick={() => handleJumpToSegment(character.firstIndex)}
-                          className="w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors hover:bg-[hsl(var(--color-accent))]"
-                        >
-                          <div className="font-medium">{character.name}</div>
-                          <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                            {character.count} 次
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </section>
-
-                  <section>
-                    <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
-                      抉择片段
-                    </h3>
-                    <div className="space-y-3">
-                      {insights.decisions.length === 0 && (
-                        <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                          尚未出现抉择
-                        </div>
-                      )}
-                      {insights.decisions.map((decision, idx) => (
-                        <div
-                          key={`${decision.index}-${idx}`}
-                          className="rounded-xl border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium">抉择 {idx + 1}</span>
+                </CardHeader>
+                <CardContent className="flex-1 min-h-0 p-0">
+                  <CustomScrollArea
+                    className="h-full"
+                    viewportClassName="reader-scroll"
+                    hideTrackWhenIdle={false}
+                  >
+                    <div className="p-6 space-y-8">
+                      <section>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))]">
+                            划线收藏
+                          </h3>
+                          {highlightEntries.length > 0 && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="text-xs h-auto px-2 py-1"
-                              onClick={() => handleJumpToSegment(decision.index)}
+                              className="text-xs h-auto px-2 py-1 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-destructive))]"
+                              onClick={() => clearHighlights()}
                             >
-                              前往
+                              清空
                             </Button>
-                          </div>
-                          <div className="space-y-1 text-xs text-[hsl(var(--color-muted-foreground))]">
-                            {decision.options.map((option, optionIndex) => (
-                              <div key={optionIndex} className="flex gap-2">
-                                <span className="text-[hsl(var(--color-primary))]">
-                                  {optionIndex + 1}.
-                                </span>
-                                <span className="flex-1">{option}</span>
-                              </div>
-                            ))}
-                          </div>
+                          )}
                         </div>
-                      ))}
+                        <div className="space-y-2">
+                          {highlightEntries.length === 0 && (
+                            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                              暂无划线内容
+                            </div>
+                          )}
+                          {highlightEntries.map((entry) => (
+                            <div
+                              key={entry.index}
+                              className="flex items-start gap-3 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
+                            >
+                              <button
+                                className="flex-1 text-left text-sm leading-relaxed hover:text-[hsl(var(--color-primary))] transition-colors"
+                                onClick={() => handleJumpToSegment(entry.index)}
+                              >
+                                {entry.label}
+                              </button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-destructive))]"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  toggleHighlight(entry.index);
+                                }}
+                                aria-label="移除划线"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section>
+                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
+                          角色出场
+                        </h3>
+                        <div className="space-y-2">
+                          {insights.characters.length === 0 && (
+                            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                              暂无角色统计
+                            </div>
+                          )}
+                          {insights.characters.map((character) => (
+                            <button
+                              key={character.name}
+                              onClick={() => handleJumpToSegment(character.firstIndex)}
+                              className="w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors hover:bg-[hsl(var(--color-accent))]"
+                            >
+                              <div className="font-medium">{character.name}</div>
+                              <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                {character.count} 次
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </section>
+
+                      <section>
+                        <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
+                          抉择片段
+                        </h3>
+                        <div className="space-y-3">
+                          {insights.decisions.length === 0 && (
+                            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                              尚未出现抉择
+                            </div>
+                          )}
+                          {insights.decisions.map((decision, idx) => (
+                            <div
+                              key={`${decision.index}-${idx}`}
+                              className="rounded-xl border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium">抉择 {idx + 1}</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-xs h-auto px-2 py-1"
+                                  onClick={() => handleJumpToSegment(decision.index)}
+                                >
+                                  前往
+                                </Button>
+                              </div>
+                              <div className="space-y-1 text-xs text-[hsl(var(--color-muted-foreground))]">
+                                {decision.options.map((option, optionIndex) => (
+                                  <div key={optionIndex} className="flex gap-2">
+                                    <span className="text-[hsl(var(--color-primary))]">
+                                      {optionIndex + 1}.
+                                    </span>
+                                    <span className="flex-1">{option}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
                     </div>
-                  </section>
-                </div>
-              </CustomScrollArea>
+                  </CustomScrollArea>
+                </CardContent>
+              </Card>
             </div>
           </aside>
         </>
