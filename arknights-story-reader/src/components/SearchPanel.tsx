@@ -99,7 +99,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 搜索栏 */}
-      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b animate-in fade-in-0 duration-500">
+      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500">
         <div className="container py-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
@@ -155,7 +155,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
           viewportClassName="reader-scroll"
           trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
         >
-          <div className="container py-6 pb-24 animate-in fade-in-0 duration-700">
+          <div className="container py-6 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
             {searching && (
               <div className="text-center text-[hsl(var(--color-muted-foreground))]">搜索中...</div>
             )}
@@ -173,7 +173,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
                   <button
                     key={`${result.storyId}-${index}`}
                     onClick={() => onSelectResult(result.storyId)}
-                    className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 text-left hover:-translate-y-0.5 animate-in fade-in-0"
+                    className="w-full p-4 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 text-left hover:-translate-y-0.5 motion-safe:animate-in motion-safe:fade-in-0"
                     style={{ animationDelay: `${index * 40}ms` }}
                   >
                     <div className="font-medium mb-1">{result.storyName}</div>

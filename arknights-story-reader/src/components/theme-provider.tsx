@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react"
 
 type Theme = "dark" | "light" | "system"
+type ThemeColor = "default" | "book" | "emerald" | "noctilucent"
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -11,11 +12,15 @@ type ThemeProviderProps = {
 type ThemeProviderState = {
   theme: Theme
   setTheme: (theme: Theme) => void
+  themeColor: ThemeColor
+  setThemeColor: (color: ThemeColor) => void
 }
 
 const initialState: ThemeProviderState = {
   theme: "system",
+  themeColor: "default",
   setTheme: () => null,
+  setThemeColor: () => null,
 }
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
@@ -29,6 +34,13 @@ export function ThemeProvider({
   const [theme, setThemeState] = useState<Theme>(
     () => (localStorage.getItem(storageKey) as Theme) || defaultTheme
   )
+  const [themeColor, setThemeColorState] = useState<ThemeColor>(() => {
+    const stored = localStorage.getItem(`${storageKey}-color`) as ThemeColor | null
+    if (stored && ["default", "book", "emerald", "noctilucent"].includes(stored)) {
+      return stored
+    }
+    return "default"
+  })
 
   useEffect(() => {
     const root = window.document.documentElement
@@ -57,6 +69,13 @@ export function ThemeProvider({
     console.log("[ThemeProvider] HTML 元素类名已更新为:", theme, "完整类名:", root.className);
   }, [theme])
 
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.dataset.themeColor = themeColor
+    localStorage.setItem(`${storageKey}-color`, themeColor)
+    console.log("[ThemeProvider] 主题色已更新:", themeColor)
+  }, [storageKey, themeColor])
+
   const value = {
     theme,
     setTheme: (theme: Theme) => {
@@ -64,6 +83,11 @@ export function ThemeProvider({
       localStorage.setItem(storageKey, theme)
       setThemeState(theme)
       console.log("[ThemeProvider] localStorage 和 state 已更新");
+    },
+    themeColor,
+    setThemeColor: (color: ThemeColor) => {
+      console.log("[ThemeProvider] setThemeColor 被调用，新主题色:", color)
+      setThemeColorState(color)
     },
   }
 
@@ -82,4 +106,3 @@ export const useTheme = () => {
 
   return context
 }
-

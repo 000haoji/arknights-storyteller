@@ -83,8 +83,8 @@ export function SyncDialog({ open, onClose, onSuccess }: SyncDialogProps) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 animate-in fade-in-0 duration-300">
-      <Card className="w-full max-w-md mx-4 animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-300">
+      <Card className="w-full max-w-md mx-4 motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:duration-300">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="h-5 w-5" />

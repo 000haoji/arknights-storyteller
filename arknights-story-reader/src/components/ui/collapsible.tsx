@@ -12,7 +12,7 @@ export function Collapsible({ title, defaultOpen = false, children }: Collapsibl
   const [open, setOpen] = React.useState(defaultOpen)
 
   return (
-    <div className="border border-[hsl(var(--color-border))] rounded-lg overflow-hidden animate-in fade-in-0 duration-500">
+    <div className="border border-[hsl(var(--color-border))] rounded-lg overflow-hidden motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between p-4 bg-[hsl(var(--color-card))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 hover:-translate-y-0.5"
@@ -26,7 +26,7 @@ export function Collapsible({ title, defaultOpen = false, children }: Collapsibl
         />
       </button>
       {open && (
-        <div className="p-2 space-y-2 bg-[hsl(var(--color-card)/0.5)] animate-in fade-in-0 slide-in-from-top-2 duration-300">
+        <div className="p-2 space-y-2 bg-[hsl(var(--color-card)/0.5)] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-top-2 motion-safe:duration-300">
           {children}
         </div>
       )}

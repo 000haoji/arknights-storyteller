@@ -8,7 +8,7 @@ interface BottomNavProps {
 
 export function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-t animate-in slide-in-from-bottom-10 duration-500">
+    <nav className="fixed bottom-0 left-0 right-0 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-t motion-safe:animate-in motion-safe:slide-in-from-bottom-10 motion-safe:duration-500">
       <div className="container flex items-center justify-around h-16">
         <button
           onClick={() => onTabChange("stories")}
