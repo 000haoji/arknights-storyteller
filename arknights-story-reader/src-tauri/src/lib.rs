@@ -35,6 +35,7 @@ pub fn run() {
             commands::get_remote_version,
             commands::check_update,
             commands::is_installed,
+            commands::get_main_stories_grouped,
             commands::get_activity_stories,
             commands::get_memory_stories,
             commands::import_from_zip,

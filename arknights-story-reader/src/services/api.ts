@@ -120,6 +120,12 @@ export const api = {
     return invoke("search_stories", { query });
   },
 
+  // 获取主线剧情（按章节分组）
+  getMainStoriesGrouped: async (): Promise<Array<[string, StoryEntry[]]>> => {
+    console.log("[API] 调用 get_main_stories_grouped");
+    return invoke("get_main_stories_grouped");
+  },
+
   // 获取活动剧情
   getActivityStories: async (): Promise<StoryEntry[]> => {
     console.log("[API] 调用 get_activity_stories");

@@ -695,7 +695,7 @@ impl DataService {
         }
     }
 
-    pub fn get_activity_stories(&self) -> Result<Vec<StoryEntry>, String> {
+    pub fn get_main_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
         if !self.is_installed() {
             return Err("NOT_INSTALLED".to_string());
         }
@@ -710,13 +710,87 @@ impl DataService {
         let data: HashMap<String, Value> = serde_json::from_str(&content)
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
 
-        let mut activity_stories = self.parse_stories_by_entry_type(&data, "ACTIVITY")?;
-        let mini_activity_stories = self.parse_stories_by_entry_type(&data, "MINI_ACTIVITY")?;
+        // 按分组ID收集主线剧情
+        let mut groups: HashMap<String, (String, Vec<StoryEntry>)> = HashMap::new();
         
-        activity_stories.extend(mini_activity_stories);
-        activity_stories.sort_by_key(|s| s.story_sort);
+        for (id, value) in data.iter() {
+            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
+                if et == "MAINLINE" {
+                    let group_name = value.get("name").and_then(|v| v.as_str()).unwrap_or("未知章节");
+                    
+                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                        let mut stories = Vec::new();
+                        for unlock_data in unlock_datas {
+                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                                stories.push(story);
+                            }
+                        }
+                        stories.sort_by_key(|s| s.story_sort);
+                        groups.insert(id.clone(), (group_name.to_string(), stories));
+                    }
+                }
+            }
+        }
+
+        // 转换为有序列表（按ID排序）
+        let mut result: Vec<(String, Vec<StoryEntry>)> = groups
+            .into_iter()
+            .map(|(_, (name, stories))| (name, stories))
+            .collect();
         
-        Ok(activity_stories)
+        result.sort_by(|a, b| {
+            // 提取章节号进行排序
+            let a_num = a.0.chars().filter(|c| c.is_numeric()).collect::<String>().parse::<i32>().unwrap_or(0);
+            let b_num = b.0.chars().filter(|c| c.is_numeric()).collect::<String>().parse::<i32>().unwrap_or(0);
+            a_num.cmp(&b_num)
+        });
+
+        Ok(result)
+    }
+
+    pub fn get_activity_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+        
+        let story_review_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/story_review_table.json");
+
+        let content = fs::read_to_string(&story_review_file)
+            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+
+        let data: HashMap<String, Value> = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+
+        let mut groups: Vec<(String, Vec<StoryEntry>)> = Vec::new();
+        
+        for (_id, value) in data.iter() {
+            if let Some(et) = value.get("entryType").and_then(|v| v.as_str()) {
+                if et == "ACTIVITY" || et == "MINI_ACTIVITY" {
+                    let activity_name = value.get("name").and_then(|v| v.as_str()).unwrap_or("未知活动");
+                    
+                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
+                        let mut stories = Vec::new();
+                        for unlock_data in unlock_datas {
+                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
+                                stories.push(story);
+                            }
+                        }
+                        
+                        if !stories.is_empty() {
+                            stories.sort_by_key(|s| s.story_sort);
+                            groups.push((activity_name.to_string(), stories));
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 按活动开始时间排序（最新的在前）
+        groups.sort_by(|a, b| b.0.cmp(&a.0));
+        
+        Ok(groups)
     }
 
     pub fn get_memory_stories(&self) -> Result<Vec<StoryEntry>, String> {

@@ -71,9 +71,24 @@ export function StoryList({ onSelectStory }: StoryListProps) {
         });
 
       const categories = await withTimeout(api.getStoryCategories());
-      const mainCategory = categories.find((c) => c.category_type === "chapter");
+      console.log("[StoryList] 获取到的分类数:", categories.length);
+      console.log("[StoryList] 分类详情:", categories.map(c => ({ 
+        id: c.id, 
+        name: c.name, 
+        type: c.type,
+        storyCount: c.stories.length 
+      })));
+      
+      const mainCategory = categories.find((c) => c.type === "chapter");
+      console.log("[StoryList] mainCategory:", mainCategory ? { 
+        id: mainCategory.id, 
+        name: mainCategory.name, 
+        storyCount: mainCategory.stories.length 
+      } : null);
+      
       const stories = mainCategory?.stories ?? [];
       console.log("[StoryList] 主线剧情加载完成 数量:", stories.length);
+      console.log("[StoryList] 前3个故事:", stories.slice(0, 3).map(s => s.storyName));
       setMainStories(stories);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "加载失败";
@@ -269,6 +284,20 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                 <EmptyState message="暂无活动剧情或需要同步" />
               )}
               {!activityLoading && activityStories.map((story) => (
+                <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
+              ))}
+            </div>
+          )}
+
+          {activeCategory === 'memory' && (
+            <div className="space-y-2">
+              {memoryLoading && (
+                <EmptyState message="追忆集加载中..." />
+              )}
+              {!memoryLoading && memoryStories.length === 0 && (
+                <EmptyState message="暂无追忆集或需要同步" />
+              )}
+              {!memoryLoading && memoryStories.map((story) => (
                 <StoryItem key={story.storyId} story={story} onSelectStory={onSelectStory} />
               ))}
             </div>
