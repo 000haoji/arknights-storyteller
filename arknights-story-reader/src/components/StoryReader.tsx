@@ -635,24 +635,24 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
                       角色出场
                     </h3>
                     <div className="space-y-2">
-                    {insights.characters.length === 0 && (
-                      <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                        暂无角色统计
-                      </div>
-                    )}
-                    {insights.characters.map((character) => (
-                      <button
-                        key={character.name}
-                        onClick={() => handleJumpToSegment(character.firstIndex)}
-                        className="w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors hover:bg-[hsl(var(--color-accent))]"
-                      >
-                        <div className="font-medium">{character.name}</div>
+                      {insights.characters.length === 0 && (
                         <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                          {character.count} 次
+                          暂无角色统计
                         </div>
-                      </button>
-                    ))}
-                  </div>
+                      )}
+                      {insights.characters.map((character) => (
+                        <button
+                          key={character.name}
+                          onClick={() => handleJumpToSegment(character.firstIndex)}
+                          className="w-full flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] px-3 py-2 text-left transition-colors hover:bg-[hsl(var(--color-accent))]"
+                        >
+                          <div className="font-medium">{character.name}</div>
+                          <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                            {character.count} 次
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </section>
 
                   <section>
@@ -661,37 +661,37 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
                     </h3>
                     <div className="space-y-3">
                       {insights.decisions.length === 0 && (
-                      <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-                        尚未出现抉择
-                      </div>
-                    )}
+                        <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                          尚未出现抉择
+                        </div>
+                      )}
                       {insights.decisions.map((decision, idx) => (
-                      <div
-                        key={`${decision.index}-${idx}`}
-                        className="rounded-xl border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">抉择 {idx + 1}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-xs h-auto px-2 py-1"
-                            onClick={() => handleJumpToSegment(decision.index)}
-                          >
-                            前往
-                          </Button>
+                        <div
+                          key={`${decision.index}-${idx}`}
+                          className="rounded-xl border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium">抉择 {idx + 1}</span>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-xs h-auto px-2 py-1"
+                              onClick={() => handleJumpToSegment(decision.index)}
+                            >
+                              前往
+                            </Button>
+                          </div>
+                          <div className="space-y-1 text-xs text-[hsl(var(--color-muted-foreground))]">
+                            {decision.options.map((option, optionIndex) => (
+                              <div key={optionIndex} className="flex gap-2">
+                                <span className="text-[hsl(var(--color-primary))]">
+                                  {optionIndex + 1}.
+                                </span>
+                                <span className="flex-1">{option}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-1 text-xs text-[hsl(var(--color-muted-foreground))]">
-                          {decision.options.map((option, optionIndex) => (
-                            <div key={optionIndex} className="flex gap-2">
-                              <span className="text-[hsl(var(--color-primary))]">
-                                {optionIndex + 1}.
-                              </span>
-                              <span className="flex-1">{option}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                       ))}
                     </div>
                   </section>

@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::blocking::Client;
-use rusqlite::vtab::fts5::load_module;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
@@ -103,7 +102,6 @@ impl DataService {
         }
         let conn = Connection::open(&self.index_db_path)
             .map_err(|e| format!("Failed to open story index database: {}", e))?;
-        load_module(&conn).map_err(|e| format!("Failed to load FTS5 module: {}", e))?;
         conn.execute_batch(
             "
             PRAGMA journal_mode = WAL;
@@ -814,7 +812,7 @@ impl DataService {
             return Err("NOT_INSTALLED".to_string());
         }
 
-        let conn = self.open_index_connection()?;
+        let mut conn = self.open_index_connection()?;
         Self::init_index_tables(&conn)?;
 
         let tx = conn
@@ -944,10 +942,7 @@ impl DataService {
         })
     }
 
-    fn search_stories_with_index(
-        &self,
-        query: &str,
-    ) -> Result<Option<Vec<SearchResult>>, String> {
+    fn search_stories_with_index(&self, query: &str) -> Result<Option<Vec<SearchResult>>, String> {
         let Some(conn) = self.try_open_index_connection()? else {
             return Ok(None);
         };
@@ -1020,11 +1015,7 @@ impl DataService {
 
         for category in categories {
             for story in category.stories {
-                if story
-                    .story_name
-                    .to_lowercase()
-                    .contains(&query_lower)
-                {
+                if story.story_name.to_lowercase().contains(&query_lower) {
                     results.push(SearchResult {
                         story_id: story.story_id.clone(),
                         story_name: story.story_name.clone(),

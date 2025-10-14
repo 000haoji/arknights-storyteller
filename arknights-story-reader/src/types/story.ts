@@ -108,3 +108,8 @@ export interface SearchResult {
   category: string;
 }
 
+export interface StoryIndexStatus {
+  ready: boolean;
+  total: number;
+  lastBuiltAt?: number | null;
+}

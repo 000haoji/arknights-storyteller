@@ -9,6 +9,8 @@ lazy_static! {
     static ref DECISION_NUMBERED_RE: Regex =
         Regex::new(r#"(?i)option\d+="([^"]+)""#).expect("invalid decision regex");
     static ref GENERIC_TAG_RE: Regex = Regex::new(r#"<[^>]+>"#).expect("invalid generic tag regex");
+    static ref PARAGRAPH_TAG_RE: Regex =
+        Regex::new(r"(?i)<p[^>]*>").expect("invalid paragraph tag regex");
 }
 
 pub fn parse_story_text(content: &str) -> ParsedStoryContent {
@@ -129,8 +131,67 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
             }
             Some(StorySegment::Header { title })
         }
-        // 其他命令忽略
-        _ => None,
+        "dialog" => parse_dialog_like(&attrs, remainder),
+        "voicewithin" => parse_dialog_like(&attrs, remainder),
+        "narration" => {
+            let text = if remainder.is_empty() {
+                attrs.get("text").map(|t| clean_text(t)).unwrap_or_default()
+            } else {
+                clean_text(remainder)
+            };
+            if !has_meaningful_content(&text) {
+                return None;
+            }
+            Some(StorySegment::Narration { text })
+        }
+        "animtext" => {
+            let text = clean_text(remainder)
+                .if_empty_then(|| attrs.get("text").map(|t| clean_text(t)).unwrap_or_default());
+            let text = text.trim().to_string();
+            if !has_meaningful_content(&text) {
+                return None;
+            }
+            Some(StorySegment::Sticker {
+                text,
+                alignment: None,
+            })
+        }
+        "title" => {
+            let title = clean_text(remainder);
+            if !has_meaningful_content(&title) {
+                return None;
+            }
+            Some(StorySegment::Header { title })
+        }
+        "div" => {
+            let text = clean_text(remainder);
+            if !has_meaningful_content(&text) {
+                return None;
+            }
+            Some(StorySegment::Subtitle {
+                text,
+                alignment: None,
+            })
+        }
+        "avatarid" | "isavatarright" => {
+            let text = clean_text(remainder);
+            if !has_meaningful_content(&text) {
+                return None;
+            }
+            Some(StorySegment::System {
+                speaker: resolve_speaker(&attrs),
+                text,
+            })
+        }
+        // 其他命令若仍包含文本，则作为旁白处理
+        _ => {
+            let text = clean_text(remainder);
+            if !has_meaningful_content(&text) {
+                None
+            } else {
+                Some(StorySegment::Narration { text })
+            }
+        }
     }
 }
 
@@ -176,26 +237,142 @@ fn clean_dialog_head(raw: &str) -> String {
     if trimmed.is_empty() {
         return String::new();
     }
-
-    // 去掉常见的前缀符号，如 `$`
-    let mut cleaned = trimmed.trim_start_matches('$').to_string();
-    if let Some(rest) = cleaned.strip_prefix("avatar_") {
-        cleaned = rest.to_string();
-    } else if let Some(rest) = cleaned.strip_prefix("char_") {
-        cleaned = rest.to_string();
-    }
-    cleaned.replace('_', " ")
+    humanize_identifier(trimmed)
 }
 
 fn clean_text(text: &str) -> String {
     if text.is_empty() {
         return String::new();
     }
-    let mut cleaned = text.replace('\u{3000}', " ").replace('\u{00A0}', " ");
+    let mut cleaned = text
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace('\r', "\n")
+        .replace('\u{3000}', " ")
+        .replace('\u{00A0}', " ");
+    cleaned = PARAGRAPH_TAG_RE.replace_all(&cleaned, "\n").to_string();
     cleaned = GENERIC_TAG_RE.replace_all(&cleaned, "").to_string();
     cleaned = cleaned.replace("{@nickname}", "博士");
     cleaned = cleaned.trim().to_string();
+
+    if cleaned.contains('\n') {
+        let normalized = cleaned
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n");
+        return normalized;
+    }
+
     cleaned
+}
+
+fn has_meaningful_content(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    if trimmed.len() <= 3 && trimmed.chars().all(|c| c.is_ascii_punctuation()) {
+        return false;
+    }
+
+    true
+}
+
+fn parse_dialog_like(attrs: &HashMap<String, String>, remainder: &str) -> Option<StorySegment> {
+    let text = if remainder.is_empty() {
+        attrs.get("text").map(|t| clean_text(t)).unwrap_or_default()
+    } else {
+        clean_text(remainder)
+    };
+    if !has_meaningful_content(&text) {
+        return None;
+    }
+
+    if let Some(character_name) = resolve_speaker(attrs) {
+        Some(StorySegment::Dialogue {
+            character_name,
+            text,
+        })
+    } else {
+        Some(StorySegment::Narration { text })
+    }
+}
+
+fn resolve_speaker(attrs: &HashMap<String, String>) -> Option<String> {
+    if let Some(name) = attrs.get("name") {
+        let cleaned = clean_text(name);
+        if has_meaningful_content(&cleaned) {
+            return Some(cleaned);
+        }
+    }
+
+    if let Some(head) = attrs.get("head") {
+        let cleaned = humanize_identifier(head);
+        if has_meaningful_content(&cleaned) {
+            return Some(cleaned);
+        }
+    }
+
+    if let Some(avatar) = attrs.get("avatarid") {
+        let cleaned = humanize_identifier(avatar);
+        if has_meaningful_content(&cleaned) {
+            return Some(cleaned);
+        }
+    }
+
+    None
+}
+
+fn humanize_identifier(raw: &str) -> String {
+    let mut value = raw.trim().trim_matches('"').trim_start_matches('$');
+    for prefix in &[
+        "char_", "npc_", "avg_", "avatar_", "trap_", "voice_", "item_", "act_", "story_",
+    ] {
+        if value.starts_with(prefix) {
+            value = &value[prefix.len()..];
+            break;
+        }
+    }
+
+    let mut parts = value
+        .split(|c| c == '_' || c == '#')
+        .filter(|part| !part.trim().is_empty() && !part.chars().all(|c| c.is_ascii_digit()))
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => {
+                    let mut s = first.to_uppercase().collect::<String>();
+                    s.push_str(chars.as_str());
+                    s
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if parts.is_empty() {
+        return raw.trim().to_string();
+    }
+
+    parts.dedup();
+    parts.join(" ")
+}
+
+trait IfEmpty {
+    fn if_empty_then(self, f: impl FnOnce() -> String) -> String;
+}
+
+impl IfEmpty for String {
+    fn if_empty_then(self, f: impl FnOnce() -> String) -> String {
+        if self.trim().is_empty() {
+            f()
+        } else {
+            self
+        }
+    }
 }
 
 #[cfg(test)]
@@ -268,6 +445,79 @@ mod tests {
             StorySegment::System { speaker, text } => {
                 assert_eq!(speaker.as_deref(), Some("sys"));
                 assert_eq!(text, "请尽可能多地与其他组织建立良好关系");
+            }
+            _ => panic!("Expected system segment"),
+        }
+    }
+
+    #[test]
+    fn test_parse_dialog_like_commands() {
+        let content = r#"[Dialog(head="char_356_broca", delay=1)]橘子酱通心粉，我有点印象。
+[VoiceWithin(head="npc_1028_texas2_1",delay=1)]把饭钱也给老板了，去别处走走吧。
+[Narration]身处宪兵队的审讯室中，他的神情却出奇地平静。
+[AnimText(id="at1")]<p=1>罗德岛医疗部</><p=2>1099年1月27日 11:38 A.M.</>
+[Title] MAIN_LOG_102_1
+[Div] Part.02
+[avatarId="", isAvatarRight="FALSE"]警告：PRTS系统权限读写中......"#;
+
+        let result = parse_story_text(content);
+        assert_eq!(result.segments.len(), 7);
+
+        match &result.segments[0] {
+            StorySegment::Dialogue {
+                character_name,
+                text,
+            } => {
+                assert_eq!(character_name, "Broca");
+                assert_eq!(text, "橘子酱通心粉，我有点印象。");
+            }
+            _ => panic!("Expected dialogue segment"),
+        }
+
+        match &result.segments[1] {
+            StorySegment::Dialogue {
+                character_name,
+                text,
+            } => {
+                assert_eq!(character_name, "Texas2");
+                assert!(text.contains("把饭钱也给老板了"));
+            }
+            _ => panic!("Expected dialogue segment"),
+        }
+
+        match &result.segments[2] {
+            StorySegment::Narration { text } => {
+                assert!(text.starts_with("身处宪兵队的审讯室"));
+            }
+            _ => panic!("Expected narration segment"),
+        }
+
+        match &result.segments[3] {
+            StorySegment::Sticker { text, .. } => {
+                assert!(text.contains("罗德岛医疗部"));
+                assert!(text.contains("1099年1月27日"));
+                assert!(text.contains("\n"));
+            }
+            _ => panic!("Expected sticker segment"),
+        }
+
+        match &result.segments[4] {
+            StorySegment::Header { title } => {
+                assert_eq!(title, "MAIN_LOG_102_1");
+            }
+            _ => panic!("Expected header segment"),
+        }
+
+        match &result.segments[5] {
+            StorySegment::Subtitle { text, .. } => {
+                assert_eq!(text, "Part.02");
+            }
+            _ => panic!("Expected subtitle segment"),
+        }
+
+        match &result.segments[6] {
+            StorySegment::System { text, .. } => {
+                assert!(text.contains("PRTS系统权限读写中"));
             }
             _ => panic!("Expected system segment"),
         }

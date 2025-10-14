@@ -43,6 +43,8 @@ pub fn run() {
             commands::get_story_categories,
             commands::get_story_content,
             commands::get_story_info,
+            commands::get_story_index_status,
+            commands::build_story_index,
             commands::search_stories,
         ])
         .run(tauri::generate_context!())

@@ -237,7 +237,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部操作栏 */}
-      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b">
+      <header className="flex-shrink-0 z-10 bg-[hsl(var(--color-background)/0.95)] backdrop-blur border-b animate-in fade-in-0 duration-500">
         <div className="container flex items-center justify-between h-14">
           <h1 className="text-lg font-semibold">明日方舟剧情</h1>
           <Button
@@ -261,7 +261,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
           viewportClassName="reader-scroll"
           trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
         >
-          <div className="container py-6 pb-24 space-y-6">
+          <div className="container py-6 pb-24 space-y-6 animate-in fade-in-0 duration-700">
             <div className="grid gap-4">
               <CategoryCard
                 title="收藏"
@@ -414,7 +414,7 @@ function CategoryCard({
   return (
     <button
       onClick={onClick}
-      className={`text-left rounded-xl border transition-colors p-6 shadow-sm hover:shadow ${
+      className={`text-left rounded-xl border transition-all duration-300 p-6 shadow-sm hover:shadow hover:-translate-y-0.5 animate-in fade-in-0 ${
         active
           ? "border-[hsl(var(--color-primary))] bg-[hsl(var(--color-accent))]"
           : "border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))]"
@@ -448,7 +448,7 @@ function StoryItem({
           onSelectStory(story);
         }
       }}
-      className="w-full flex items-center gap-3 p-3 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-colors text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[hsl(var(--color-primary))]"
+      className="w-full flex items-center gap-3 p-3 rounded-lg border border-[hsl(var(--color-border))] hover:bg-[hsl(var(--color-accent))] transition-all duration-200 ease-out text-left cursor-pointer focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[hsl(var(--color-primary))] hover:-translate-y-0.5 animate-in fade-in-0"
     >
       <BookOpen className="h-4 w-4 text-[hsl(var(--color-muted-foreground))] flex-shrink-0" />
       <div className="flex-1 min-w-0">

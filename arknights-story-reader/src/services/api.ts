@@ -6,6 +6,7 @@ import type {
   ParsedStoryContent,
   SearchResult,
   StoryEntry,
+  StoryIndexStatus,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -115,6 +116,16 @@ export const api = {
     return invoke("get_story_info", { infoPath });
   },
 
+  // 获取全文索引状态
+  getStoryIndexStatus: async (): Promise<StoryIndexStatus> => {
+    return invoke("get_story_index_status");
+  },
+
+  // 重建全文索引
+  buildStoryIndex: async (): Promise<void> => {
+    return invoke("build_story_index");
+  },
+
   // 搜索剧情
   searchStories: async (query: string): Promise<SearchResult[]> => {
     return invoke("search_stories", { query });
@@ -138,4 +149,3 @@ export const api = {
     return invoke("get_memory_stories");
   },
 };
-
