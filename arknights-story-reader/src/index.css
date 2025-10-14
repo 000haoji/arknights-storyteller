@@ -101,7 +101,7 @@ body {
 
 .reader-text {
   color: hsl(var(--color-foreground) / 0.92);
-  white-space: pre-line;
+  white-space: normal;
 }
 
 .reader-paragraph {

@@ -57,10 +57,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
 
-  const sanitizedSegments = useMemo<StorySegment[]>(() => {
+  const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
 
-    return content.segments.flatMap<StorySegment>((segment) => {
+    const cleaned = content.segments.flatMap<StorySegment>((segment) => {
       if (segment.type === "dialogue" || segment.type === "narration") {
         const normalizedText = segment.text
           .replace(/\r\n/g, "\n")
@@ -90,12 +90,29 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       return [segment];
     });
+
+    const merged: StorySegment[] = [];
+    cleaned.forEach((segment) => {
+      if (segment.type === "dialogue") {
+        const last = merged[merged.length - 1];
+        if (last && last.type === "dialogue" && last.characterName === segment.characterName) {
+          merged[merged.length - 1] = {
+            ...last,
+            text: `${last.text}\n${segment.text}`.replace(/\n{2,}/g, "\n"),
+          };
+          return;
+        }
+      }
+      merged.push(segment);
+    });
+
+    return merged;
   }, [content]);
 
   const totalPages = useMemo(() => {
-    if (!sanitizedSegments.length) return 0;
-    return Math.max(1, Math.ceil(sanitizedSegments.length / SEGMENTS_PER_PAGE));
-  }, [sanitizedSegments]);
+    if (!processedSegments.length) return 0;
+    return Math.max(1, Math.ceil(processedSegments.length / SEGMENTS_PER_PAGE));
+  }, [processedSegments]);
 
   const progressPercentage = useMemo(() => {
     const clamped = Math.max(0, Math.min(1, progressValue));
@@ -129,28 +146,38 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
     [settings.paragraphSpacing]
   );
 
+  const renderLines = useCallback((text: string) => {
+    const parts = text.split("\n");
+    return parts.map((line, index) => (
+      <span key={index}>
+        {line}
+        {index < parts.length - 1 ? <br /> : null}
+      </span>
+    ));
+  }, []);
+
   const renderableSegments = useMemo<RenderableSegment[]>(() => {
-    if (!sanitizedSegments.length) return [];
+    if (!processedSegments.length) return [];
     if (settings.readingMode === "paged") {
       const start = currentPage * SEGMENTS_PER_PAGE;
-      const end = Math.min(start + SEGMENTS_PER_PAGE, sanitizedSegments.length);
-      return sanitizedSegments.slice(start, end).map((segment, offset) => ({
+      const end = Math.min(start + SEGMENTS_PER_PAGE, processedSegments.length);
+      return processedSegments.slice(start, end).map((segment, offset) => ({
         segment,
         index: start + offset,
       }));
     }
-    return sanitizedSegments.map((segment, index) => ({ segment, index }));
-  }, [sanitizedSegments, currentPage, settings.readingMode]);
+    return processedSegments.map((segment, index) => ({ segment, index }));
+  }, [processedSegments, currentPage, settings.readingMode]);
 
   const insights = useMemo(() => {
-    if (!sanitizedSegments.length) {
+    if (!processedSegments.length) {
       return { characters: [] as Array<{ name: string; count: number; firstIndex: number }>, decisions: [] as Array<{ index: number; options: string[] }> };
     }
 
     const characterMap = new Map<string, { count: number; firstIndex: number }>();
     const decisions: Array<{ index: number; options: string[] }> = [];
 
-    sanitizedSegments.forEach((segment, index) => {
+    processedSegments.forEach((segment, index) => {
       if (segment.type === "dialogue") {
         const entry = characterMap.get(segment.characterName);
         if (entry) {
@@ -169,7 +196,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       .slice(0, 12);
 
     return { characters, decisions };
-  }, [sanitizedSegments]);
+  }, [processedSegments]);
 
   const loadStory = useCallback(async () => {
     try {
@@ -190,7 +217,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   }, [loadStory]);
 
   useLayoutEffect(() => {
-    if (!sanitizedSegments.length) return;
+    if (!processedSegments.length) return;
 
     if (settings.readingMode === "paged") {
       const storedPage =
@@ -213,10 +240,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       const ratio = denominator <= 0 ? 1 : storedTop / denominator;
       setProgressValue(Number.isFinite(ratio) ? ratio : 0);
     }
-  }, [sanitizedSegments, settings.readingMode, progress, totalPages]);
+  }, [processedSegments, settings.readingMode, progress, totalPages]);
 
   useEffect(() => {
-    if (!sanitizedSegments.length || settings.readingMode !== "scroll") return;
+    if (!processedSegments.length || settings.readingMode !== "scroll") return;
     const container = scrollContainerRef.current;
     if (!container) return;
 
@@ -245,10 +272,10 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       container.removeEventListener("scroll", handleScroll);
       if (frame) cancelAnimationFrame(frame);
     };
-  }, [sanitizedSegments, settings.readingMode, updateProgress]);
+  }, [processedSegments, settings.readingMode, updateProgress]);
 
   useEffect(() => {
-    if (!sanitizedSegments.length || settings.readingMode !== "paged" || totalPages === 0) return;
+    if (!processedSegments.length || settings.readingMode !== "paged" || totalPages === 0) return;
     const ratio = totalPages <= 1 ? 1 : (currentPage + 1) / totalPages;
     const clamped = Number.isFinite(ratio) ? Math.max(0, Math.min(1, ratio)) : 0;
     setProgressValue(clamped);
@@ -258,7 +285,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       percentage: clamped,
       updatedAt: Date.now(),
     });
-  }, [sanitizedSegments, currentPage, settings.readingMode, totalPages, updateProgress]);
+  }, [processedSegments, currentPage, settings.readingMode, totalPages, updateProgress]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -284,7 +311,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
   const handleJumpToSegment = useCallback(
     (index: number) => {
-    if (!sanitizedSegments.length) return;
+    if (!processedSegments.length) return;
     if (settings.readingMode === "scroll") {
       const el = document.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
         if (el) {
@@ -296,7 +323,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
       }
       setInsightsOpen(false);
     },
-    [sanitizedSegments, settings.readingMode, totalPages]
+    [processedSegments, settings.readingMode, totalPages]
   );
 
   const handleScrollToTop = useCallback(() => {
@@ -308,17 +335,19 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
   }, [settings.readingMode]);
 
   const renderSegment = useCallback(
-    ({ segment, index }: RenderableSegment) => {
+    ({ segment, index }: RenderableSegment, isLast: boolean) => {
+      const spacing = isLast ? "0" : readerSpacing;
+
       if (segment.type === "dialogue") {
         return (
           <div
             key={index}
             data-segment-index={index}
             className="reader-paragraph reader-dialogue"
-            style={{ marginBottom: readerSpacing }}
+            style={{ marginBottom: spacing }}
           >
             <div className="reader-character-name">{segment.characterName}</div>
-            <div className="reader-text">{segment.text}</div>
+            <div className="reader-text">{renderLines(segment.text)}</div>
           </div>
         );
       }
@@ -329,9 +358,9 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-narration"
-            style={{ marginBottom: readerSpacing }}
+            style={{ marginBottom: spacing }}
           >
-            {segment.text}
+            {renderLines(segment.text)}
           </div>
         );
       }
@@ -342,7 +371,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-decision"
-            style={{ marginBottom: readerSpacing }}
+            style={{ marginBottom: spacing }}
           >
             <div className="reader-decision-title">选择：</div>
             {segment.options.map((option, optionIndex) => (
@@ -361,12 +390,12 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-system"
-            style={{ marginBottom: readerSpacing }}
+            style={{ marginBottom: spacing }}
           >
             {segment.speaker ? (
               <div className="reader-system-speaker">{segment.speaker}</div>
             ) : null}
-            <div className="reader-text">{segment.text}</div>
+            <div className="reader-text">{renderLines(segment.text)}</div>
           </div>
         );
       }
@@ -383,9 +412,9 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-subtitle"
-            style={{ marginBottom: readerSpacing, textAlign: alignment }}
+            style={{ marginBottom: spacing, textAlign: alignment }}
           >
-            {segment.text}
+            {renderLines(segment.text)}
           </div>
         );
       }
@@ -402,9 +431,9 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-sticker"
-            style={{ marginBottom: readerSpacing, textAlign: alignment }}
+            style={{ marginBottom: spacing, textAlign: alignment }}
           >
-            {segment.text}
+            {renderLines(segment.text)}
           </div>
         );
       }
@@ -415,7 +444,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
             key={index}
             data-segment-index={index}
             className="reader-header"
-            style={{ marginBottom: readerSpacing }}
+            style={{ marginBottom: spacing }}
           >
             {segment.title}
           </div>
@@ -424,7 +453,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
 
       return null;
     },
-    [readerSpacing]
+    [readerSpacing, renderLines]
   );
 
   if (loading) {
@@ -447,7 +476,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
     );
   }
 
-  if (!content || sanitizedSegments.length === 0) {
+  if (!content || processedSegments.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-screen gap-4">
         <div className="text-muted-foreground">暂无内容</div>
@@ -525,7 +554,9 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
         >
           <div className="container py-8 pb-24">
             <div className="reader-content" style={readerContentStyles}>
-              {renderableSegments.map((segment) => renderSegment(segment))}
+              {renderableSegments.map((segment, idx) =>
+                renderSegment(segment, idx === renderableSegments.length - 1)
+              )}
             </div>
           </div>
         </CustomScrollArea>
@@ -579,7 +610,7 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
         <>
           <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setInsightsOpen(false)} />
           <aside className="fixed inset-y-0 right-0 z-50 w-full max-w-sm bg-[hsl(var(--color-background)/0.97)] border-l shadow-xl">
-            <div className="h-full overflow-y-auto flex flex-col">
+            <div className="h-full flex flex-col overflow-hidden">
               <div className="p-6 border-b">
                 <div className="flex items-center justify-between">
                   <div>
@@ -597,12 +628,13 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
                 </p>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
-                    角色出场
-                  </h3>
-                  <div className="space-y-2">
+              <CustomScrollArea className="flex-1" viewportClassName="reader-scroll" hideTrackWhenIdle={false}>
+                <div className="p-6 space-y-8">
+                  <section>
+                    <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
+                      角色出场
+                    </h3>
+                    <div className="space-y-2">
                     {insights.characters.length === 0 && (
                       <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
                         暂无角色统计
@@ -621,19 +653,19 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
                       </button>
                     ))}
                   </div>
-                </section>
+                  </section>
 
-                <section>
-                  <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
-                    抉择片段
-                  </h3>
-                  <div className="space-y-3">
-                    {insights.decisions.length === 0 && (
+                  <section>
+                    <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))] mb-3">
+                      抉择片段
+                    </h3>
+                    <div className="space-y-3">
+                      {insights.decisions.length === 0 && (
                       <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
                         尚未出现抉择
                       </div>
                     )}
-                    {insights.decisions.map((decision, idx) => (
+                      {insights.decisions.map((decision, idx) => (
                       <div
                         key={`${decision.index}-${idx}`}
                         className="rounded-xl border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
@@ -660,10 +692,11 @@ export function StoryReader({ storyPath, storyName, onBack }: StoryReaderProps) 
                           ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
+                      ))}
+                    </div>
+                  </section>
+                </div>
+              </CustomScrollArea>
             </div>
           </aside>
         </>

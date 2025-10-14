@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FONT_FAMILIES, ReaderSettings as Settings } from "@/hooks/useReaderSettings";
 import { X, RotateCcw } from "lucide-react";
+import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 const READING_MODES: Array<{ value: Settings["readingMode"]; label: string; description: string }> = [
   { value: "scroll", label: "连续滚动", description: "纵向滚动阅读，更接近移动端小说体验" },
@@ -46,7 +47,9 @@ export function ReaderSettingsPanel({
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6 overflow-y-auto px-4 sm:px-6 py-6 flex-1">
+        <CardContent className="flex-1 p-0">
+          <CustomScrollArea className="h-full" viewportClassName="reader-scroll" hideTrackWhenIdle={false}>
+            <div className="space-y-6 px-4 sm:px-6 py-6">
           {/* 阅读模式 */}
           <div className="space-y-3">
             <label className="text-sm font-medium">阅读模式</label>
@@ -250,6 +253,8 @@ export function ReaderSettingsPanel({
               </button>
             </div>
           </div>
+            </div>
+          </CustomScrollArea>
         </CardContent>
       </Card>
     </div>

@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 18,
   lineHeight: 1.8,
   letterSpacing: 0,
-  paragraphSpacing: 0.9, // rem
+  paragraphSpacing: 0.7, // rem
   pageWidth: 100, // 100%
   textAlign: 'justify',
   theme: 'default',

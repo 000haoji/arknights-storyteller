@@ -5,11 +5,16 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::blocking::Client;
+use rusqlite::vtab::fts5::load_module;
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
 use zip::ZipArchive;
 
-use crate::models::{Activity, Chapter, SearchResult, StoryCategory, StoryEntry};
+use crate::models::{
+    Activity, Chapter, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus, StorySegment,
+};
+use crate::parser::parse_story_text;
 
 const REPO_API_URL: &str = "https://api.github.com/repos/Kengxxiao/ArknightsGameData";
 const REPO_DOWNLOAD_URL: &str = "https://codeload.github.com/Kengxxiao/ArknightsGameData/zip";
@@ -75,6 +80,7 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
 #[derive(Clone)]
 pub struct DataService {
     data_dir: PathBuf,
+    index_db_path: PathBuf,
 }
 
 impl DataService {
@@ -86,7 +92,164 @@ impl DataService {
     pub fn new(app_data_dir: PathBuf) -> Self {
         Self {
             data_dir: app_data_dir.join("ArknightsGameData"),
+            index_db_path: app_data_dir.join("story_index.db"),
         }
+    }
+
+    fn open_index_connection(&self) -> Result<Connection, String> {
+        if let Some(parent) = self.index_db_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create index directory: {}", e))?;
+        }
+        let conn = Connection::open(&self.index_db_path)
+            .map_err(|e| format!("Failed to open story index database: {}", e))?;
+        load_module(&conn).map_err(|e| format!("Failed to load FTS5 module: {}", e))?;
+        conn.execute_batch(
+            "
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            ",
+        )
+        .map_err(|e| format!("Failed to configure index database: {}", e))?;
+        Ok(conn)
+    }
+
+    fn try_open_index_connection(&self) -> Result<Option<Connection>, String> {
+        if !self.index_db_path.exists() {
+            return Ok(None);
+        }
+        match self.open_index_connection() {
+            Ok(conn) => Ok(Some(conn)),
+            Err(err) => {
+                eprintln!("[INDEX] Failed to open story index: {}", err);
+                Ok(None)
+            }
+        }
+    }
+
+    fn init_index_tables(conn: &Connection) -> Result<(), String> {
+        conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS story_index_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS story_index USING fts5(
+                story_id UNINDEXED,
+                story_name,
+                category UNINDEXED,
+                tokenized_content,
+                raw_content UNINDEXED,
+                tokenize = 'unicode61'
+            );
+            ",
+        )
+        .map_err(|e| format!("Failed to initialize story index database: {}", e))
+    }
+
+    fn clear_story_index(&self) -> Result<(), String> {
+        if self.index_db_path.exists() {
+            fs::remove_file(&self.index_db_path)
+                .map_err(|e| format!("Failed to remove story index: {}", e))?;
+        }
+        Ok(())
+    }
+
+    fn flatten_segments(segments: &[StorySegment]) -> String {
+        let mut parts = Vec::with_capacity(segments.len());
+        for segment in segments {
+            match segment {
+                StorySegment::Dialogue {
+                    character_name,
+                    text,
+                } => {
+                    parts.push(format!("{}：{}", character_name, text));
+                }
+                StorySegment::Narration { text }
+                | StorySegment::System { text, .. }
+                | StorySegment::Subtitle { text, .. }
+                | StorySegment::Sticker { text, .. } => {
+                    parts.push(text.clone());
+                }
+                StorySegment::Decision { options } => {
+                    parts.push(options.join(" / "));
+                }
+                StorySegment::Header { title } => {
+                    parts.push(title.clone());
+                }
+            }
+        }
+        parts.join("\n")
+    }
+
+    fn tokenize_for_fts(text: &str) -> Vec<String> {
+        let mut tokens = Vec::new();
+        let mut ascii_buffer = String::new();
+
+        for ch in text.chars() {
+            if ch.is_ascii_alphanumeric() {
+                ascii_buffer.push(ch.to_ascii_lowercase());
+                continue;
+            }
+
+            if !ascii_buffer.is_empty() {
+                tokens.push(ascii_buffer.clone());
+                ascii_buffer.clear();
+            }
+
+            if ch.is_whitespace() {
+                continue;
+            }
+
+            tokens.push(ch.to_string());
+        }
+
+        if !ascii_buffer.is_empty() {
+            tokens.push(ascii_buffer);
+        }
+
+        tokens
+    }
+
+    fn build_tokenized_content(text: &str) -> String {
+        Self::tokenize_for_fts(text).join(" ")
+    }
+
+    fn build_fts_query(tokens: &[String]) -> Option<String> {
+        if tokens.is_empty() {
+            return None;
+        }
+        let mut parts = Vec::with_capacity(tokens.len());
+
+        for token in tokens {
+            if token.is_empty() {
+                continue;
+            }
+
+            let is_ascii = token.chars().all(|c| c.is_ascii_alphanumeric());
+            if is_ascii {
+                parts.push(format!("{}*", token));
+            } else {
+                parts.push(token.clone());
+            }
+        }
+
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" AND "))
+        }
+    }
+
+    fn extract_meta_value(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+        conn.query_row(
+            "SELECT value FROM story_index_meta WHERE key = ?1",
+            params![key],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|e| format!("Failed to read story index meta {}: {}", key, e))
     }
 
     /// 下载并解压最新数据包
@@ -126,6 +289,10 @@ impl DataService {
         eprintln!("[SYNC] 开始下载和解压");
         self.download_and_extract(&client, &app, &reference)?;
         eprintln!("[SYNC] 下载和解压完成");
+
+        if let Err(err) = self.clear_story_index() {
+            eprintln!("[SYNC] Failed to reset story index: {}", err);
+        }
 
         // 写入版本信息
         eprintln!("[SYNC] 写入版本信息");
@@ -401,6 +568,10 @@ impl DataService {
         self.extract_zip_at(&temp_path, parent_dir, &app)?;
         fs::remove_file(&temp_path).ok();
 
+        if let Err(err) = self.clear_story_index() {
+            eprintln!("[IMPORT] Failed to reset story index: {}", err);
+        }
+
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -637,8 +808,211 @@ impl DataService {
         fs::read_to_string(&full_path).map_err(|e| format!("Failed to read info file: {}", e))
     }
 
-    /// 搜索剧情
-    pub fn search_stories(&self, query: &str) -> Result<Vec<SearchResult>, String> {
+    /// 重建剧情全文索引
+    pub fn rebuild_story_index(&self) -> Result<(), String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let conn = self.open_index_connection()?;
+        Self::init_index_tables(&conn)?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| format!("Failed to start index transaction: {}", e))?;
+
+        tx.execute("DELETE FROM story_index", [])
+            .map_err(|e| format!("Failed to clear story index: {}", e))?;
+
+        let categories = self.get_story_categories()?;
+        let mut insert_stmt = tx
+            .prepare(
+                "
+            INSERT INTO story_index (
+                story_id,
+                story_name,
+                category,
+                tokenized_content,
+                raw_content
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
+        ",
+            )
+            .map_err(|e| format!("Failed to prepare story index insert: {}", e))?;
+
+        let mut total = 0usize;
+
+        for category in categories {
+            for story in category.stories {
+                let story_id = story.story_id.clone();
+                let story_name = story.story_name.clone();
+                let story_path = story.story_txt.clone();
+
+                let raw_text = match self.read_story_text(&story_path) {
+                    Ok(text) => text,
+                    Err(err) => {
+                        eprintln!(
+                            "[INDEX] Skip story {}: failed to read text ({})",
+                            story_id, err
+                        );
+                        continue;
+                    }
+                };
+
+                let parsed = parse_story_text(&raw_text);
+                let flattened = Self::flatten_segments(&parsed.segments);
+
+                let combined_raw = if flattened.trim().is_empty() {
+                    story_name.clone()
+                } else {
+                    format!("{}\n{}", story_name, flattened)
+                };
+
+                let tokenized = Self::build_tokenized_content(&combined_raw);
+                if tokenized.trim().is_empty() {
+                    continue;
+                }
+
+                insert_stmt
+                    .execute(params![
+                        story_id,
+                        story_name,
+                        category.name,
+                        tokenized,
+                        combined_raw
+                    ])
+                    .map_err(|e| format!("Failed to insert story into index: {}", e))?;
+                total += 1;
+            }
+        }
+
+        drop(insert_stmt);
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        tx.execute(
+            "
+            INSERT INTO story_index_meta (key, value)
+            VALUES ('last_built_at', ?1)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        ",
+            params![timestamp.to_string()],
+        )
+        .map_err(|e| format!("Failed to update index metadata: {}", e))?;
+
+        tx.execute(
+            "
+            INSERT INTO story_index_meta (key, value)
+            VALUES ('total_count', ?1)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        ",
+            params![total.to_string()],
+        )
+        .map_err(|e| format!("Failed to update index total: {}", e))?;
+
+        tx.commit()
+            .map_err(|e| format!("Failed to commit story index rebuild: {}", e))?;
+
+        Ok(())
+    }
+
+    /// 获取索引状态
+    pub fn get_story_index_status(&self) -> Result<StoryIndexStatus, String> {
+        let Some(conn) = self.try_open_index_connection()? else {
+            return Ok(StoryIndexStatus {
+                ready: false,
+                total: 0,
+                last_built_at: None,
+            });
+        };
+
+        Self::init_index_tables(&conn)?;
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM story_index", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let last_built_at = Self::extract_meta_value(&conn, "last_built_at")?
+            .and_then(|value| value.parse::<i64>().ok());
+
+        Ok(StoryIndexStatus {
+            ready: total > 0,
+            total: total.max(0) as usize,
+            last_built_at,
+        })
+    }
+
+    fn search_stories_with_index(
+        &self,
+        query: &str,
+    ) -> Result<Option<Vec<SearchResult>>, String> {
+        let Some(conn) = self.try_open_index_connection()? else {
+            return Ok(None);
+        };
+
+        Self::init_index_tables(&conn)?;
+
+        let total: i64 = conn
+            .query_row("SELECT COUNT(*) FROM story_index", [], |row| row.get(0))
+            .unwrap_or(0);
+        if total == 0 {
+            return Ok(None);
+        }
+
+        let tokens = Self::tokenize_for_fts(query);
+        let Some(fts_query) = Self::build_fts_query(&tokens) else {
+            return Ok(Some(Vec::new()));
+        };
+
+        let mut stmt = conn
+            .prepare(
+                "
+            SELECT story_id, story_name, category, raw_content
+            FROM story_index
+            WHERE story_index MATCH ?1
+            LIMIT 100
+        ",
+            )
+            .map_err(|e| format!("Failed to prepare story index query: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![fts_query], |row| {
+                let story_id: String = row.get(0)?;
+                let story_name: String = row.get(1)?;
+                let category: String = row.get(2)?;
+                let raw_content: String = row.get(3)?;
+                Ok((story_id, story_name, category, raw_content))
+            })
+            .map_err(|e| format!("Failed to execute story index query: {}", e))?;
+
+        let query_lower = query.to_lowercase();
+        let mut results = Vec::new();
+        for row in rows {
+            if let Ok((story_id, story_name, category, raw_content)) = row {
+                let mut matched_text = self.extract_context(&raw_content, &query_lower);
+                if matched_text.is_empty() {
+                    let preview: String = raw_content.chars().take(120).collect();
+                    matched_text = if preview.len() < raw_content.len() {
+                        format!("{}...", preview)
+                    } else {
+                        preview
+                    };
+                }
+                results.push(SearchResult {
+                    story_id,
+                    story_name,
+                    matched_text,
+                    category,
+                });
+            }
+        }
+
+        Ok(Some(results))
+    }
+
+    fn search_stories_fallback(&self, query: &str) -> Result<Vec<SearchResult>, String> {
         let mut results = Vec::new();
         let query_lower = query.to_lowercase();
 
@@ -646,8 +1020,11 @@ impl DataService {
 
         for category in categories {
             for story in category.stories {
-                // 搜索剧情名称
-                if story.story_name.to_lowercase().contains(&query_lower) {
+                if story
+                    .story_name
+                    .to_lowercase()
+                    .contains(&query_lower)
+                {
                     results.push(SearchResult {
                         story_id: story.story_id.clone(),
                         story_name: story.story_name.clone(),
@@ -657,10 +1034,8 @@ impl DataService {
                     continue;
                 }
 
-                // 搜索剧情内容
                 if let Ok(content) = self.read_story_text(&story.story_txt) {
                     if content.to_lowercase().contains(&query_lower) {
-                        // 提取匹配的上下文
                         let matched_text = self.extract_context(&content, &query_lower);
                         results.push(SearchResult {
                             story_id: story.story_id,
@@ -676,16 +1051,52 @@ impl DataService {
         Ok(results)
     }
 
+    /// 搜索剧情
+    pub fn search_stories(&self, query: &str) -> Result<Vec<SearchResult>, String> {
+        let trimmed = query.trim();
+        if trimmed.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        match self.search_stories_with_index(trimmed) {
+            Ok(Some(results)) => {
+                if results.is_empty() {
+                    self.search_stories_fallback(trimmed)
+                } else {
+                    Ok(results)
+                }
+            }
+            Ok(None) => self.search_stories_fallback(trimmed),
+            Err(err) => {
+                eprintln!(
+                    "[INDEX] Failed to search using index ({}), fallback to linear scan",
+                    err
+                );
+                self.search_stories_fallback(trimmed)
+            }
+        }
+    }
+
     /// 提取匹配文本的上下文
     fn extract_context(&self, content: &str, query: &str) -> String {
-        if let Some(pos) = content.to_lowercase().find(query) {
+        let content_lower = content.to_lowercase();
+        if let Some(pos) = content_lower.find(query) {
             let start = pos.saturating_sub(50);
             let end = (pos + query.len() + 50).min(content.len());
             let context = &content[start..end];
-            format!("...{}...", context.trim())
-        } else {
-            String::new()
+            return format!("...{}...", context.trim());
         }
+
+        for token in query.split_whitespace().filter(|t| !t.is_empty()) {
+            if let Some(pos) = content_lower.find(token) {
+                let start = pos.saturating_sub(50);
+                let end = (pos + token.len() + 50).min(content.len());
+                let context = &content[start..end];
+                return format!("...{}...", context.trim());
+            }
+        }
+
+        String::new()
     }
 
     pub fn get_main_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {

@@ -118,3 +118,11 @@ pub struct SearchResult {
     pub matched_text: String,
     pub category: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoryIndexStatus {
+    pub ready: bool,
+    pub total: usize,
+    #[serde(rename = "lastBuiltAt")]
+    pub last_built_at: Option<i64>,
+}

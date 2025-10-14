@@ -27,3 +27,4 @@ walkdir = "2"
 lazy_static = "1.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.30", features = ["bundled", "vtab"] }

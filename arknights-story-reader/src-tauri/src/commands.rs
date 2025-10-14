@@ -1,5 +1,7 @@
 use crate::data_service::DataService;
-use crate::models::{Chapter, ParsedStoryContent, SearchResult, StoryCategory, StoryEntry};
+use crate::models::{
+    Chapter, ParsedStoryContent, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
+};
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
@@ -90,6 +92,22 @@ pub async fn get_story_info(
 ) -> Result<String, String> {
     let service = lock_service(&state.data_service);
     service.read_story_info(&info_path)
+}
+
+#[tauri::command]
+pub async fn get_story_index_status(
+    state: State<'_, AppState>,
+) -> Result<StoryIndexStatus, String> {
+    let service = lock_service(&state.data_service);
+    service.get_story_index_status()
+}
+
+#[tauri::command]
+pub async fn build_story_index(state: State<'_, AppState>) -> Result<(), String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.rebuild_story_index())
+        .await
+        .map_err(|err| format!("Failed to join build story index task: {}", err))?
 }
 
 #[tauri::command]
