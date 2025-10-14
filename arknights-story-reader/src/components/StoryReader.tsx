@@ -418,6 +418,14 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   useLayoutEffect(() => {
     if (!processedSegments.length) return;
 
+    // 若正在处理搜索跳转或初始定位，避免恢复旧的阅读进度，以免覆盖滚动
+    const shouldSkipRestore =
+      pendingScrollIndexRef.current !== null ||
+      (initialFocus && initialFocus.storyId === storyId);
+    if (shouldSkipRestore) {
+      return;
+    }
+
     if (settings.readingMode === "paged") {
       const storedPage =
         progress?.readingMode === "paged" && typeof progress.currentPage === "number"
@@ -439,7 +447,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       const ratio = denominator <= 0 ? 1 : storedTop / denominator;
       setProgressValue(Number.isFinite(ratio) ? ratio : 0);
     }
-  }, [processedSegments, settings.readingMode, progress, totalPages]);
+  }, [processedSegments, settings.readingMode, progress, totalPages, initialFocus, storyId]);
 
   // 初始角色高亮与定位
   useEffect(() => {
@@ -561,15 +569,16 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       const index = pendingScrollIndexRef.current;
       if (index === null) return;
       const container = scrollContainerRef.current;
-      if (!container) return;
-      const element = container.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
-      if (element) {
-        // 找到了目标元素，执行滚动
-        scrollToSegment(index);
-        pendingScrollIndexRef.current = null;
-        return;
+      if (container) {
+        const element = container.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
+        if (element) {
+          // 找到了目标元素，执行滚动
+          scrollToSegment(index);
+          pendingScrollIndexRef.current = null;
+          return;
+        }
       }
-      if (tries < 6) {
+      if (tries < 30) {
         tries += 1;
         requestAnimationFrame(tick);
       }

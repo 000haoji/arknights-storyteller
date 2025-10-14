@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/services/api";
 import type { SearchResult, StoryEntry, StoryIndexStatus } from "@/types/story";
 import { Input } from "@/components/ui/input";

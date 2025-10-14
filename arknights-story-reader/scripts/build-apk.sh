@@ -16,6 +16,7 @@ REQUIRED_CMDS=(
   rustup
   java
   sdkmanager
+  keytool
 )
 
 missing=()
@@ -78,10 +79,78 @@ KEYSTORE_PATH="${ANDROID_KEYSTORE_PATH:-$HOME/.android/release.keystore}"
 KEY_ALIAS="${ANDROID_KEY_ALIAS:-release}"
 KEYSTORE_PASSWORD="${ANDROID_KEYSTORE_PASSWORD:-}"
 KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+USING_RELEASE_KEYSTORE=false
 
-[ -f "$KEYSTORE_PATH" ] || fail "Keystore not found: $KEYSTORE_PATH (set ANDROID_KEYSTORE_PATH)"
-[ -n "$KEYSTORE_PASSWORD" ] || fail "Please export ANDROID_KEYSTORE_PASSWORD"
-[ -n "$KEY_PASSWORD" ] || fail "Please export ANDROID_KEY_PASSWORD or ensure it's same as keystore password"
+check_keystore_entry() {
+  local keystore="$1"
+  local alias="$2"
+  local storepass="$3"
+  local keypass="$4"
+
+  local output
+  if ! output=$(keytool -list -v -keystore "$keystore" -storepass "$storepass" -alias "$alias" -keypass "$keypass" 2>&1); then
+    warn "Failed to inspect keystore '$keystore' alias '$alias': $output"
+    return 1
+  fi
+
+  if echo "$output" | grep -qi "PrivateKeyEntry"; then
+    return 0
+  fi
+
+  warn "Keystore alias '$alias' in '$keystore' is not a PrivateKeyEntry"
+  return 1
+}
+
+if [ -f "$KEYSTORE_PATH" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_PASSWORD" ]; then
+  if check_keystore_entry "$KEYSTORE_PATH" "$KEY_ALIAS" "$KEYSTORE_PASSWORD" "$KEY_PASSWORD"; then
+    info "Using release keystore: $KEYSTORE_PATH (alias $KEY_ALIAS)"
+    USING_RELEASE_KEYSTORE=true
+  else
+    warn "Release keystore '$KEYSTORE_PATH' alias '$KEY_ALIAS' is invalid, falling back to debug keystore."
+  fi
+else
+  if [ ! -f "$KEYSTORE_PATH" ]; then
+    warn "Release keystore '$KEYSTORE_PATH' not found; falling back to debug keystore."
+  else
+    warn "Release keystore passwords not provided; falling back to debug keystore."
+  fi
+fi
+
+if [ "$USING_RELEASE_KEYSTORE" = false ]; then
+  DEBUG_KEYSTORE="${ANDROID_DEBUG_KEYSTORE_PATH:-$HOME/.android/debug.keystore}"
+  DEBUG_ALIAS="${ANDROID_DEBUG_KEY_ALIAS:-androiddebugkey}"
+  DEBUG_PASS="${ANDROID_DEBUG_KEYSTORE_PASSWORD:-android}"
+  DEBUG_KEY_PASS="${ANDROID_DEBUG_KEY_PASSWORD:-$DEBUG_PASS}"
+
+  regenerate_debug_keystore() {
+    info "Generating Android debug keystore at $DEBUG_KEYSTORE"
+    mkdir -p "$(dirname "$DEBUG_KEYSTORE")"
+    rm -f "$DEBUG_KEYSTORE"
+    keytool -genkeypair \
+      -keystore "$DEBUG_KEYSTORE" \
+      -storepass "$DEBUG_PASS" \
+      -keypass "$DEBUG_KEY_PASS" \
+      -alias "$DEBUG_ALIAS" \
+      -keyalg RSA \
+      -keysize 2048 \
+      -validity 10000 \
+      -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+  }
+
+  if [ ! -f "$DEBUG_KEYSTORE" ] || ! check_keystore_entry "$DEBUG_KEYSTORE" "$DEBUG_ALIAS" "$DEBUG_PASS" "$DEBUG_KEY_PASS"; then
+    regenerate_debug_keystore || fail "Failed to create debug keystore automatically."
+  fi
+
+  if check_keystore_entry "$DEBUG_KEYSTORE" "$DEBUG_ALIAS" "$DEBUG_PASS" "$DEBUG_KEY_PASS"; then
+    info "Falling back to Android debug keystore: $DEBUG_KEYSTORE (alias $DEBUG_ALIAS)"
+    KEYSTORE_PATH="$DEBUG_KEYSTORE"
+    KEY_ALIAS="$DEBUG_ALIAS"
+    KEYSTORE_PASSWORD="$DEBUG_PASS"
+    KEY_PASSWORD="$DEBUG_KEY_PASS"
+  else
+    fail "Keystore alias '$KEY_ALIAS' is invalid and debug keystore could not be prepared."
+  fi
+fi
 
 find_build_tool() {
   local tool="$1"
