@@ -1,3 +1,5 @@
+#[cfg(target_os = "android")]
+mod apk_updater;
 mod commands;
 mod data_service;
 mod models;
@@ -23,7 +25,7 @@ pub fn run() {
 
     #[cfg(target_os = "android")]
     {
-        builder = builder;
+        builder = builder.plugin(crate::apk_updater::init());
     }
 
     builder

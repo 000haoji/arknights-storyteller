@@ -51,16 +51,26 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
 
     match command.as_str() {
         "name" => {
-            let character_name = attrs.get("name").map(|s| s.trim().to_string()).unwrap_or_default();
+            let character_name = attrs
+                .get("name")
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default();
             let text = clean_text(remainder);
             if text.is_empty() {
                 return None;
             }
             if character_name.is_empty() {
                 // 空名字多数用于场景字幕/地点时间
-                return Some(StorySegment::Subtitle { text, alignment: None });
+                return Some(StorySegment::Subtitle {
+                    text,
+                    alignment: None,
+                });
             }
-            Some(StorySegment::Dialogue { character_name, text, position: None })
+            Some(StorySegment::Dialogue {
+                character_name,
+                text,
+                position: None,
+            })
         }
         "multiline" => {
             let character_name = attrs.get("name")?.trim().to_string();
@@ -68,7 +78,11 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
             if text.is_empty() {
                 return None;
             }
-            Some(StorySegment::Dialogue { character_name, text, position: None })
+            Some(StorySegment::Dialogue {
+                character_name,
+                text,
+                position: None,
+            })
         }
         "decision" => {
             let mut options = Vec::new();
@@ -129,7 +143,8 @@ fn parse_command_line(line: &str) -> Option<StorySegment> {
             Some(StorySegment::System { speaker, text })
         }
         // 非文本指令一律忽略
-        "background" | "image" | "imagetween" | "character" | "playmusic" | "stopmusic" | "playsound" | "delay" | "camerashake" | "blocker" => None,
+        "background" | "image" | "imagetween" | "character" | "playmusic" | "stopmusic"
+        | "playsound" | "delay" | "camerashake" | "blocker" => None,
         "subtitle" => {
             let text = attrs
                 .get("text")
@@ -321,10 +336,18 @@ fn parse_dialog_like(attrs: &HashMap<String, String>, remainder: &str) -> Option
     }
 
     if let Some(character_name) = resolve_speaker(attrs) {
-        let position = attrs
-            .get("isavatarright")
-            .and_then(|v| if is_truthy(v) { Some("right".to_string()) } else { None });
-        Some(StorySegment::Dialogue { character_name, text, position })
+        let position = attrs.get("isavatarright").and_then(|v| {
+            if is_truthy(v) {
+                Some("right".to_string())
+            } else {
+                None
+            }
+        });
+        Some(StorySegment::Dialogue {
+            character_name,
+            text,
+            position,
+        })
     } else {
         Some(StorySegment::Narration { text })
     }

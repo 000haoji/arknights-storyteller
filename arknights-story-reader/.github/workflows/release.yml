@@ -165,6 +165,24 @@ EOF
           RELEASE_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
           gh release upload "$TAG" "$APK_PATH#$RELEASE_NAME" --clobber
 
+      - name: Publish Android update manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="app-v${{ needs.publish-tauri.outputs.app_version }}"
+          VERSION="${{ needs.publish-tauri.outputs.app_version }}"
+          APK_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
+          JSON_PATH="android-latest.json"
+          cat <<EOF > "$JSON_PATH"
+{
+  "version": "$VERSION",
+  "notes": "",
+  "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
+  "fileName": "$APK_NAME"
+}
+EOF
+          gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
+
       - name: Cleanup keystore
         if: always()
         run: rm -f src-tauri/gen/android/upload-keystore.jks src-tauri/gen/android/keystore.properties

@@ -1,222 +1,165 @@
-# Story Teller
+# 明日方舟剧情阅读器 (Arknights Story Reader)
 
-一个基于 Tauri 2.0 + React + TypeScript 构建的剧情阅读器，提供类似小说阅读器的舒适体验。
+一个基于 Tauri 2 + React 19 + TypeScript + Rust 的本地剧情阅读与搜索应用，支持桌面与移动平台，提供舒适的“小说式”阅读体验、全文检索、人物统计、收藏与线索集分享等功能。
 
-## ✨ 特性
+> 数据来自社区项目 ArknightsGameData。应用不包含或分发任何商业素材，仅提供本地阅读与管理能力。
 
-- 📚 **专业阅读体验** 
-  - 小说式排版，对话与旁白区分显示
-  - 支持字体切换（系统、内置思源宋体、内置思源黑体、内置霞鹜文楷）
-  - 字号、行距、字间距自由调节
-  - 阅读设置实时生效并自动保存
-  
-- 🌓 **深色/浅色主题** - 支持主题切换，保护眼睛
+## ✨ 功能特性
 
-- 📱 **全平台支持**
-  - 桌面端（Windows/macOS/Linux）
-  - Android（API 24+）
-  - iOS（13.0+）
-  - 触控优化，完美支持手机操作
-  
-- 📂 **完整剧情分类**
-  - 主线剧情（MAINLINE）
-  - 活动剧情（ACTIVITY + MINI_ACTIVITY）
-  - 追忆集/干员密录（NONE）
-  - 懒加载设计，避免卡顿
-  
-- 🔍 **全文搜索** - 快速查找剧情内容
+- 阅读体验与设置
+  - 对话/旁白/标题/系统提示等分段渲染，移动端优化排版
+  - 字体、字号、行距、字间距、对齐方式、页宽等可调，实时生效并记忆
+  - 深浅色与多主题主色；触控与键盘翻页（分页/滚动两种模式）
+- 数据获取与版本管理
+  - 一键在线同步：直接从 GitHub 下载 ArknightsGameData ZIP；显示阶段与进度
+  - 本地 ZIP 导入：弱网/离线环境可手动导入
+  - 版本显示：当前 commit 短 SHA + 抓取时间；支持“检查更新”
+- 全文搜索（支持中文）
+  - 内置 SQLite FTS5 全文索引，unicode61 分词 + CJK 串词短语匹配
+  - 支持 AND/OR/NOT（前缀 `-`）与短语（双引号）；前缀匹配（ASCII 自动 `*`）
+  - 无索引时自动回退逐条扫描；显示实时搜索进度；结果上限 500 条
+- 人物统计
+  - 自动统计每章/每活动的人物发言次数；按人物聚合并可一键跳转到该人物首次出现
+- 收藏与线索集（分享码 AKC1-…）
+  - 阅读器段落“划线收藏”，汇总为线索集；支持导入/导出分享码并跨设备复现定位
+- 多平台与更新
+  - 桌面（Windows/macOS/Linux）：Tauri 2；内置自动更新
+  - Android：支持在线更新（APK 下载+安装），iOS 可本地构建安装
 
-- 🔄 **智能同步** 
-  - HTTP 直接下载 GitHub ZIP（无需 git）
-  - 实时进度条（百分比 + 已下载 MB）
-  - 版本对比（当前版本 vs 最新版本）
-  - 手动导入 ZIP 功能（网络慢时）
-  - 跨平台兼容（桌面/Android/iOS）
+## 🧱 技术架构
 
-## 🚀 技术栈
+- 前端：Vite + React 19 + TypeScript + Tailwind 4
+  - 组件与页面：`StoryList`（主线/活动/支线/肉鸽/密录）、`StoryReader`、`SearchPanel`、`CharactersPanel`、`Settings`、`ClueSetsPanel`
+  - 状态与能力：收藏、划线高亮、阅读进度、主题与偏好、线索集导入导出
+- 后端（Tauri + Rust）：
+  - 同步与导入（`DataService::sync_data/import_zip_*`）：下载 GitHub ZIP 或本地 ZIP 并解压；维护 `version.json`
+  - 全文索引（`rusqlite` FTS5）：构建/查询/状态；tokenize 与 CJK 处理
+  - 数据整理：主线/活动/支线/肉鸽/密录分组；读取剧情文本与简介
+  - 剧情解析器（`parser.rs`）：将原始脚本解析为可读段落（对话/旁白/系统/标题/选项）
+  - Android 插件：自定义 APK 更新插件（Kotlin/OkHttp），用于下载并触发安装
 
-- **前端框架**: React 18 + TypeScript
-- **UI 组件**: shadcn/ui + Tailwind CSS
-- **桌面框架**: Tauri 2.0
-- **后端语言**: Rust
-- **数据来源**: [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData)
+## 📂 目录结构（关键）
 
-## 📦 安装与运行
+```
+src/                     # 前端 (React + TS)
+  components/            # 视图组件（阅读器/列表/搜索/设置/人物/线索集等）
+  hooks/                 # 业务 hooks（进度、偏好、收藏、线索集、更新等）
+  services/api.ts        # 调用 Tauri 后端命令 + 事件监听
+  lib/                   # 工具与编解码（线索集分享码等）
+  types/                 # TS 类型
+
+src-tauri/               # 后端 (Rust + Tauri)
+  src/
+    lib.rs               # 应用初始化、插件与命令注册
+    commands.rs          # Tauri 命令层（异步/线程池封装）
+    data_service.rs      # 数据同步/导入、索引、搜索、分组与读取
+    parser.rs            # 剧情文本解析
+    apk_updater.rs       # Android 平台更新插件桥接
+  gen/android            # Android 工程（Gradle 脚手架与插件实现）
+  patches/tauri-plugin   # 覆盖的 tauri-plugin（对 mobile 适配）
+
+dist/                    # 前端构建产物
+```
+
+## 🧭 命令与事件（前后端约定）
+
+- 同步/版本：`sync_data`、`get_current_version`、`get_remote_version`、`check_update`
+- 导入：`import_from_zip`、`import_from_zip_bytes`
+- 索引：`get_story_index_status`、`build_story_index`
+- 搜索：`search_stories`、`search_stories_with_progress`、`search_stories_debug`
+- 剧情与分组：
+  - `get_main_stories_grouped`、`get_activity_stories_grouped`、`get_sidestory_stories_grouped`、`get_roguelike_stories_grouped`、`get_memory_stories`
+  - `get_chapters`、`get_story_categories`、`get_story_content`、`get_story_info`、`get_story_entry`
+- 事件（前端监听）：`sync-progress`（同步/导入进度）、`search-progress`（搜索进度）
+
+## ⚙️ 安装与运行
 
 ### 前置要求
 
-- Node.js 18+
-- Rust 1.70+
-- 对于移动端开发：
-  - Android: Android Studio
-  - iOS: Xcode (macOS only)
+- Node.js 18+，Rust（stable），pnpm/npm 任一包管理器
+- 桌面：各平台原生依赖（如 Linux 需 `webkit2gtk-4.1` 等，见 CI 脚本）
+- Android：Android Studio + SDK/NDK；iOS：Xcode（macOS）
 
-### 开发环境
-
-1. **克隆项目**
-   ```bash
-   cd story-teller
-   npm install
-   ```
-
-2. **运行开发服务器**
-   ```bash
-   # 桌面端
-   npm run tauri dev
-
-   # Android
-   npm run tauri android init  # 首次运行
-   npm run tauri android dev
-
-   # iOS
-   npm run tauri ios init      # 首次运行
-   npm run tauri ios dev
-   ```
-
-3. **构建生产版本**
-   ```bash
-   # 桌面端
-   npm run tauri build
-
-   # Android
-   npm run tauri android build
-
-   # iOS
-   npm run tauri ios build
-   ```
-
-## 📖 使用说明
-
-### 首次使用
-
-1. 打开应用后，点击右上角的"同步"按钮
-2. 应用会自动从 GitHub 克隆 ArknightsGameData 仓库（约 500MB）
-3. 同步完成后即可浏览剧情
-
-### 浏览剧情
-
-- **剧情列表**: 在首页浏览按章节分类的剧情
-- **阅读界面**: 点击剧情进入阅读，支持上下翻页
-- **返回**: 点击左上角返回按钮回到列表
-
-### 搜索功能
-
-1. 切换到"搜索"标签页
-2. 输入关键词搜索剧情名称或内容
-3. 点击搜索结果直接阅读
-
-### 主题设置
-
-- 在"设置"标签页中切换深色/浅色主题
-- 主题设置会自动保存
-
-## 🎨 UI 设计
-
-- **移动端优先**: 采用底部导航栏，便于单手操作
-- **触控优化**: 支持滑动翻页（计划中）
-- **阅读体验**: 
-  - 大字号、宽行距，适合长时间阅读
-  - 角色对话与旁白区分显示
-  - 选项分支清晰标注
-
-## 📂 项目结构
-
-```
-story-teller/
-├── src/                      # 前端源码
-│   ├── components/          # React 组件
-│   │   ├── ui/             # shadcn/ui 基础组件
-│   │   ├── StoryReader.tsx # 剧情阅读器
-│   │   ├── StoryList.tsx   # 剧情列表
-│   │   └── SearchPanel.tsx # 搜索面板
-│   ├── services/           # API 服务
-│   ├── types/              # TypeScript 类型定义
-│   └── lib/                # 工具函数
-├── src-tauri/              # Rust 后端
-│   └── src/
-│       ├── models.rs       # 数据模型
-│       ├── parser.rs       # 剧情解析器
-│       ├── data_service.rs # 数据服务
-│       └── commands.rs     # Tauri 命令
-└── ArknightsGameData/      # 剧情数据（首次同步后生成）
-```
-
-## 🔧 剧情解析
-
-剧情文本采用自定义脚本格式，解析器会提取：
-
-- **对话**: `[name="角色名"] 对话内容`
-- **旁白**: 不带标签的纯文本
-- **选项**: `[Decision(options="选项1;选项2")]`
-
-其他指令（音乐、背景、特效等）会被过滤，只保留可读文本。
-
-## 🛠️ 开发计划
-
-- [ ] 滑动翻页支持
-- [ ] 阅读进度保存
-- [ ] 收藏功能
-- [ ] 剧情导出
-- [ ] 字体大小调节
-- [ ] 更多主题配色
-
-## 🔄 自动更新与发布（CI）
-
-项目已内置 GitHub Actions 流水线（`.github/workflows/release.yml`），推送到 `release` 分支或手动触发时会自动：
-
-1. 在 macOS / Windows / Linux 上并行执行 `tauri build`，利用 `tauri-apps/tauri-action` 生成安装包与 `latest.json`。
-2. 调用 `scripts/build-apk.sh` 构建并签名 Android `universal` APK。
-3. 将所有产物上传到同一份 GitHub Release（默认草稿），方便检查后再发布。
-
-### 必备密钥与环境变量
-
-| 作用 | GitHub Secret | 内容示例 |
-| --- | --- | --- |
-| Tauri 更新签名私钥 | `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 输出的私钥 PEM |
-| 私钥密码（可选） | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 无密码可留空 |
-| Tauri 更新公钥 | `TAURI_UPDATER_PUBKEY` | `public.key` 内容，用于应用校验 |
-| 更新 JSON 地址 | `TAURI_UPDATER_ENDPOINT` | 如 `https://github.com/<owner>/<repo>/releases/latest/download/latest.json` |
-| Android keystore（Base64） | `ANDROID_KEYSTORE_B64` | `upload-keystore.jks` 的 `base64` 结果 |
-| Android keystore 密码 | `ANDROID_KEYSTORE_PASSWORD` | 生成 keystore 时输入的 store 密码 |
-| Android key alias | `ANDROID_KEY_ALIAS` | 默认 `upload` |
-| Android key 密码（可选） | `ANDROID_KEY_PASSWORD` | 若与 store 密码不同需配置 |
-
-工作流会在运行时写入 `src-tauri/gen/android/keystore.properties` 以及 keystore 文件，避免泄露到仓库。
-
-### 本地准备
+### 开发
 
 ```bash
-# 生成 Tauri 更新密钥（默认保存到 ~/.tauri）
-npm run tauri signer generate -- -w ~/.tauri/story-teller.key
-cat ~/.tauri/story-teller.key      # 填入 TAURI_SIGNING_PRIVATE_KEY
-cat ~/.tauri/story-teller.key.pub  # 填入 TAURI_UPDATER_PUBKEY
+npm i
 
-# 创建 Android upload keystore
-keytool -genkey -v -keystore upload-keystore.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
-base64 upload-keystore.jks         # 填入 ANDROID_KEYSTORE_B64
+# 桌面开发
+npm run tauri dev
+
+# Android（首次需 init）
+npm run tauri android init
+npm run tauri android dev
+
+# iOS（首次需 init）
+npm run tauri ios init
+npm run tauri ios dev
 ```
 
-开发环境下可复制 `.env.example` 为 `.env`，填入上述变量以便调试自动更新。
+### 构建
 
-### 应用内自动更新
+```bash
+# 桌面安装包
+npm run tauri build
 
-- 桌面端已注册 `tauri-plugin-updater` 与 `tauri-plugin-process`，前端的 `useAppUpdater` 会在启动时检测更新。
-- 若发现新版本，会弹出确认对话框，下载完成后自动重启。
-- 请确保 `TAURI_UPDATER_ENDPOINT` 可通过 HTTPS 访问，并与 Release 中的 `latest.json` 地址一致。
+# Android APK
+npm run tauri android build
 
-### Android 构建
+# iOS
+npm run tauri ios build
+```
 
-- CI 默认生成 `app-universal-release-signed.apk`，上传到 Release 中，便于旁载或分发到第三方商店。
-- 如需 Play 商店 `.aab`，可在 `scripts/build-apk.sh` 或工作流中新增步骤。
-- 构建日志与产物均可在 Actions 对应工作流页面查看。
+## 🔄 数据同步与目录
 
-## 📝 许可证
+- 在线同步：后端从 `https://codeload.github.com/Kengxxiao/ArknightsGameData/zip/<ref>` 下载 ZIP，并解压至应用数据目录（由 Tauri `app_data_dir` 决定）
+- 手动导入：支持从文件选择或字节流导入 ZIP（同样解压到数据目录）
+- 版本信息：`ArknightsGameData/version.json` 保存 `{ commit, fetched_at }`，前端显示短 SHA 与“几分钟前/小时前/天前”
 
-本项目仅供学习交流使用，剧情内容版权归上海鹰角网络科技有限公司所有。
+## 🔍 全文索引与搜索
 
-## 🙏 致谢
+- 存储：`story_index.db`（应用数据目录），`fts5(story_name, tokenized_content, story_code, raw_content, …)`
+- 构建：前端在设置页可手动触发“重新建立全文索引”；同步/导入后也可构建
+- 语法：支持空格分词、短语（中文自动逐字短语）、`OR`、前缀（ASCII 自动 `*`）、排除项（`-关键字`）
+- 回退：索引不可用时自动线性扫描，仍能得到结果但速度较慢
 
-- [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) - 剧情数据来源
-- [Tauri](https://tauri.app) - 跨平台框架
-- [shadcn/ui](https://ui.shadcn.com) - UI 组件库
+## 📦 环境变量
+
+见 `.env.example`：
+
+- `TAURI_UPDATER_PUBKEY`、`TAURI_UPDATER_ENDPOINT`：桌面自动更新签名与更新 JSON 地址
+- `VITE_ANDROID_UPDATE_FEED`：Android 更新 manifest（例如 `android-latest.json`）
+
+## 🚀 CI / 发布
+
+- 工作流：`.github/workflows/release.yml`
+  - 使用 `tauri-apps/tauri-action` 打包桌面应用并创建 Release 草稿
+  - Android 侧构建签名的 universal APK，上传至同一 Release，并生成 `android-latest.json`
+- 所需机密：`TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)`、`TAURI_UPDATER_*`、`ANDROID_KEYSTORE_*` 等（详见工作流脚本注释）
+
+## 🙌 开源依赖与致谢
+
+- 数据来源
+  - ArknightsGameData（Kengxxiao/ArknightsGameData）
+- 框架与运行时
+  - Tauri 2（@tauri-apps/api, CLI；插件：opener/dialog/process/updater）
+  - React 19、Vite、TypeScript
+- UI 与工具
+  - Tailwind CSS 4、tailwindcss-animate、class-variance-authority、clsx、tailwind-merge
+  - lucide-react（图标）
+- Rust 依赖
+  - tauri、serde/serde_json、regex、lazy_static、walkdir
+  - reqwest (rustls, blocking)、zip、rusqlite (bundled, vtab)、unicode-normalization（NFKC 归一化）
+- Android 依赖
+  - AndroidX（appcompat/webkit/activity-ktx）、Material Components
+  - Kotlin Coroutines、OkHttp3（APK 下载）
+- CI
+  - tauri-apps/tauri-action、android-actions/setup-android、dtolnay/rust-toolchain、swatinem/rust-cache、actions/setup-node
+
+向以上项目与社区维护者致以诚挚感谢！
+
+## 📝 版权与声明
+
+- 本项目仅用于学习与技术交流，不包含或分发官方资源
+- 明日方舟及其相关素材的著作权归上海鹰角网络科技有限公司所有
+

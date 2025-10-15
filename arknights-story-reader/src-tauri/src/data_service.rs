@@ -9,8 +9,8 @@ use reqwest::blocking::Client;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter};
-use zip::ZipArchive;
 use unicode_normalization::UnicodeNormalization;
+use zip::ZipArchive;
 
 use crate::models::{
     Activity, Chapter, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
@@ -164,8 +164,7 @@ fn is_cjk(ch: char) -> bool {
 
 fn normalize_nfkc_lower_strip_marks(text: &str) -> String {
     // NFKC + lowercase + strip combining marks (e.g., café -> cafe)
-    text
-        .nfkc()
+    text.nfkc()
         .flat_map(|c| c.to_lowercase())
         .filter(|c| unicode_normalization::char::canonical_combining_class(*c) == 0)
         .collect()
@@ -541,7 +540,11 @@ impl DataService {
                                 prev_was_or = true;
                             } else {
                                 let is_not = t.starts_with('-');
-                                let content = if is_not { t.trim_start_matches('-').to_string() } else { t };
+                                let content = if is_not {
+                                    t.trim_start_matches('-').to_string()
+                                } else {
+                                    t
+                                };
                                 if !content.is_empty() {
                                     terms.push((content, is_not, prev_was_or));
                                     prev_was_or = false;
@@ -558,7 +561,11 @@ impl DataService {
                             prev_was_or = true;
                         } else {
                             let is_not = t.starts_with('-');
-                            let content = if is_not { t.trim_start_matches('-').to_string() } else { t };
+                            let content = if is_not {
+                                t.trim_start_matches('-').to_string()
+                            } else {
+                                t
+                            };
                             if !content.is_empty() {
                                 terms.push((content, is_not, prev_was_or));
                                 prev_was_or = false;
@@ -575,7 +582,11 @@ impl DataService {
                 // dangling OR, ignore
             } else {
                 let is_not = t.starts_with('-');
-                let content = if is_not { t.trim_start_matches('-').to_string() } else { t };
+                let content = if is_not {
+                    t.trim_start_matches('-').to_string()
+                } else {
+                    t
+                };
                 if !content.is_empty() {
                     terms.push((content, is_not, prev_was_or));
                 }
@@ -590,7 +601,11 @@ impl DataService {
             let mut has_cjk = false;
             let mut all_cjk = true;
             for ch in s.chars() {
-                if is_cjk(ch) { has_cjk = true; } else if !ch.is_whitespace() { all_cjk = false; }
+                if is_cjk(ch) {
+                    has_cjk = true;
+                } else if !ch.is_whitespace() {
+                    all_cjk = false;
+                }
             }
             if has_cjk && all_cjk {
                 let parts: Vec<String> = s
@@ -612,18 +627,28 @@ impl DataService {
 
         let mut parts: Vec<String> = Vec::new();
         for (i, (raw, is_not, is_or)) in terms.into_iter().enumerate() {
-            if raw.is_empty() { continue; }
+            if raw.is_empty() {
+                continue;
+            }
             let mut piece = to_phrase_if_cjk(&raw);
             if is_not {
                 piece = format!("NOT {}", piece);
             }
             if i > 0 {
-                if is_or { parts.push("OR".to_string()); } else { parts.push("AND".to_string()); }
+                if is_or {
+                    parts.push("OR".to_string());
+                } else {
+                    parts.push("AND".to_string());
+                }
             }
             parts.push(piece);
         }
 
-        if parts.is_empty() { None } else { Some(parts.join(" ")) }
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" "))
+        }
     }
 
     fn extract_meta_value(conn: &Connection, key: &str) -> Result<Option<String>, String> {
@@ -1210,9 +1235,7 @@ impl DataService {
 
     /// 读取剧情简介
     pub fn read_story_info(&self, info_path: &str) -> Result<String, String> {
-        let base_dir = self
-            .data_dir
-            .join("zh_CN/gamedata/story");
+        let base_dir = self.data_dir.join("zh_CN/gamedata/story");
 
         let trimmed = info_path.trim();
         if trimmed.is_empty() {
@@ -1629,7 +1652,9 @@ impl DataService {
         for r in index_results {
             if seen.insert(r.story_id.clone()) {
                 merged.push(r);
-                if merged.len() >= SEARCH_RESULT_LIMIT { break; }
+                if merged.len() >= SEARCH_RESULT_LIMIT {
+                    break;
+                }
             }
         }
         let mut added = 0usize;
@@ -1638,16 +1663,24 @@ impl DataService {
                 if seen.insert(r.story_id.clone()) {
                     merged.push(r);
                     added += 1;
-                    if merged.len() >= SEARCH_RESULT_LIMIT { break; }
+                    if merged.len() >= SEARCH_RESULT_LIMIT {
+                        break;
+                    }
                 }
             }
         }
         if added > 0 {
             logs.push(format!("线性扫描补全 {} 条结果", added));
         }
-        logs.push(format!("搜索总耗时 {} ms", start_time.elapsed().as_millis()));
+        logs.push(format!(
+            "搜索总耗时 {} ms",
+            start_time.elapsed().as_millis()
+        ));
 
-        Ok(SearchDebugResponse { results: merged, logs })
+        Ok(SearchDebugResponse {
+            results: merged,
+            logs,
+        })
     }
 
     /// 带进度事件的搜索：优先使用索引；当回退线性扫描时，实时发送遍历进度
@@ -1935,32 +1968,39 @@ impl DataService {
         let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
 
         for (id, value) in data.iter() {
-            let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) else { continue; };
+            let Some(entry_type) = value.get("entryType").and_then(|v| v.as_str()) else {
+                continue;
+            };
             let act_type = value.get("actType").and_then(|v| v.as_str()).unwrap_or("");
             // 支线=大型活动（ACTIVITY + ACTIVITY_STORY）
             if entry_type == "ACTIVITY" && act_type == "ACTIVITY_STORY" {
-                    let group_name = value
-                        .get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("支线剧情");
+                let group_name = value
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("支线剧情");
 
-                    if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array()) {
-                        let mut stories = Vec::new();
-                        for unlock_data in unlock_datas {
-                            if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone()) {
-                                stories.push(story);
-                            }
-                        }
-                        if !stories.is_empty() {
-                            stories.sort_by_key(|s| s.story_sort);
-                            groups.push((group_name.to_string(), stories, id.clone()));
+                if let Some(unlock_datas) = value.get("infoUnlockDatas").and_then(|v| v.as_array())
+                {
+                    let mut stories = Vec::new();
+                    for unlock_data in unlock_datas {
+                        if let Ok(story) = serde_json::from_value::<StoryEntry>(unlock_data.clone())
+                        {
+                            stories.push(story);
                         }
                     }
+                    if !stories.is_empty() {
+                        stories.sort_by_key(|s| s.story_sort);
+                        groups.push((group_name.to_string(), stories, id.clone()));
+                    }
+                }
             }
         }
 
         groups.sort_by(|a, b| compare_story_group_ids(&a.2, &b.2));
-        Ok(groups.into_iter().map(|(name, stories, _)| (name, stories)).collect())
+        Ok(groups
+            .into_iter()
+            .map(|(name, stories, _)| (name, stories))
+            .collect())
     }
 
     pub fn get_roguelike_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
@@ -2013,9 +2053,7 @@ impl DataService {
         collect_content_paths(&mut path_desc_map, &meta_value);
 
         // 使用 story_table 作为权威来源，枚举所有 Obt/Roguelike 文本
-        let story_table_file = self
-            .data_dir
-            .join("zh_CN/gamedata/excel/story_table.json");
+        let story_table_file = self.data_dir.join("zh_CN/gamedata/excel/story_table.json");
         let story_table_content = fs::read_to_string(&story_table_file)
             .map_err(|e| format!("Failed to read story table file: {}", e))?;
         let table_obj: HashMap<String, Value> = serde_json::from_str(&story_table_content)
@@ -2034,7 +2072,10 @@ impl DataService {
                 .nth(2)
                 .map(|s| s.to_uppercase())
                 .unwrap_or_else(|| "ROGUE".to_string());
-            let sort = counters.entry(group_key.clone()).and_modify(|x| *x += 1).or_insert(1);
+            let sort = counters
+                .entry(group_key.clone())
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
             let name = path_desc_map.get(&lower).cloned().unwrap_or_else(|| {
                 // 取最后一段作为兜底标题
                 key.split('/').last().unwrap_or(&key).to_string()
@@ -2066,7 +2107,10 @@ impl DataService {
 
         let mut out: Vec<(String, Vec<StoryEntry>)> = grouped
             .into_iter()
-            .map(|(name, mut stories)| { stories.sort_by_key(|e| e.story_sort); (name, stories) })
+            .map(|(name, mut stories)| {
+                stories.sort_by_key(|e| e.story_sort);
+                (name, stories)
+            })
             .collect();
         out.sort_by(|a, b| compare_story_group_ids(&a.0, &b.0));
         Ok(out)
