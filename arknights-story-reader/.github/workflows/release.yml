@@ -89,7 +89,7 @@ jobs:
   android:
     name: Build signed Android APK
     needs: publish-tauri
-    if: ${{ needs.publish-tauri.outputs.release_id != '' && secrets.ANDROID_KEYSTORE_B64 != '' }}
+    if: ${{ needs.publish-tauri.result == 'success' && secrets.ANDROID_KEYSTORE_B64 != '' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
@@ -114,8 +114,8 @@ jobs:
           packages: |
             tools
             platform-tools
-            platforms;android-34
-            build-tools;34.0.0
+            platforms;android-36
+            build-tools;36.0.0
             ndk;26.1.10909125
 
       - name: Setup Rust (Android target)
@@ -144,12 +144,12 @@ jobs:
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
 
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          cat > src-tauri/gen/android/keystore.properties <<EOF
-storePassword=${ANDROID_KEYSTORE_PASSWORD}
-keyPassword=${KEY_PASSWORD}
-keyAlias=${ANDROID_KEY_ALIAS}
-storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks
-EOF
+          {
+            echo "storePassword=${ANDROID_KEYSTORE_PASSWORD}"
+            echo "keyPassword=${KEY_PASSWORD}"
+            echo "keyAlias=${ANDROID_KEY_ALIAS}"
+            echo "storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks"
+          } > src-tauri/gen/android/keystore.properties
 
       - name: Prepare signing env
         run: |
@@ -164,32 +164,32 @@ EOF
       - name: Upload APK to release
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          APP_VERSION: "${{ needs.publish-tauri.outputs.app_version }}"
         run: |
           APK_PATH="src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-signed.apk"
           if [ ! -f "$APK_PATH" ]; then
             echo "Signed APK not found at $APK_PATH" >&2
             exit 1
           fi
-          TAG="app-v${{ needs.publish-tauri.outputs.app_version }}"
-          RELEASE_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
+          TAG="app-v$APP_VERSION"
+          RELEASE_NAME="arknights-story-reader-android-$APP_VERSION.apk"
           gh release upload "$TAG" "$APK_PATH#$RELEASE_NAME" --clobber
 
       - name: Publish Android update manifest
         env:
           GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          REPO: "${{ github.repository }}"
+          APP_VERSION: "${{ needs.publish-tauri.outputs.app_version }}"
         run: |
-          TAG="app-v${{ needs.publish-tauri.outputs.app_version }}"
-          VERSION="${{ needs.publish-tauri.outputs.app_version }}"
-          APK_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
+          TAG="app-v$APP_VERSION"
+          APK_NAME="arknights-story-reader-android-$APP_VERSION.apk"
           JSON_PATH="android-latest.json"
-          cat > "$JSON_PATH" <<EOF
-{
-  "version": "$VERSION",
-  "notes": "",
-  "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
-  "fileName": "$APK_NAME"
-}
-EOF
+          printf '{
+            "version": "%s",
+            "notes": "",
+            "url": "https://github.com/%s/releases/download/%s/%s",
+            "fileName": "%s"
+          }' "$APP_VERSION" "$REPO" "$TAG" "$APK_NAME" "$APK_NAME" > "$JSON_PATH"
           gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
 
       - name: Cleanup keystore
