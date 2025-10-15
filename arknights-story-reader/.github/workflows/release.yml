@@ -138,16 +138,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
           ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
           ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
+          WORKSPACE_PATH: "${{ github.workspace }}"
         run: |
           mkdir -p src-tauri/gen/android
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
 
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          cat > src-tauri/gen/android/keystore.properties <<'EOF'
+          cat > src-tauri/gen/android/keystore.properties <<EOF
 storePassword=${ANDROID_KEYSTORE_PASSWORD}
 keyPassword=${KEY_PASSWORD}
 keyAlias=${ANDROID_KEY_ALIAS}
-storeFile=${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
+storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks
 EOF
 
       - name: Prepare signing env
