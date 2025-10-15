@@ -6,7 +6,7 @@
 
 - 📚 **专业阅读体验** 
   - 小说式排版，对话与旁白区分显示
-  - 支持字体切换（系统、宋体、黑体、楷体、苹方、思源宋体）
+  - 支持字体切换（系统、内置思源宋体、内置思源黑体、内置霞鹜文楷）
   - 字号、行距、字间距自由调节
   - 阅读设置实时生效并自动保存
   
@@ -159,6 +159,57 @@ story-teller/
 - [ ] 剧情导出
 - [ ] 字体大小调节
 - [ ] 更多主题配色
+
+## 🔄 自动更新与发布（CI）
+
+项目已内置 GitHub Actions 流水线（`.github/workflows/release.yml`），推送到 `release` 分支或手动触发时会自动：
+
+1. 在 macOS / Windows / Linux 上并行执行 `tauri build`，利用 `tauri-apps/tauri-action` 生成安装包与 `latest.json`。
+2. 调用 `scripts/build-apk.sh` 构建并签名 Android `universal` APK。
+3. 将所有产物上传到同一份 GitHub Release（默认草稿），方便检查后再发布。
+
+### 必备密钥与环境变量
+
+| 作用 | GitHub Secret | 内容示例 |
+| --- | --- | --- |
+| Tauri 更新签名私钥 | `TAURI_SIGNING_PRIVATE_KEY` | `tauri signer generate` 输出的私钥 PEM |
+| 私钥密码（可选） | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | 无密码可留空 |
+| Tauri 更新公钥 | `TAURI_UPDATER_PUBKEY` | `public.key` 内容，用于应用校验 |
+| 更新 JSON 地址 | `TAURI_UPDATER_ENDPOINT` | 如 `https://github.com/<owner>/<repo>/releases/latest/download/latest.json` |
+| Android keystore（Base64） | `ANDROID_KEYSTORE_B64` | `upload-keystore.jks` 的 `base64` 结果 |
+| Android keystore 密码 | `ANDROID_KEYSTORE_PASSWORD` | 生成 keystore 时输入的 store 密码 |
+| Android key alias | `ANDROID_KEY_ALIAS` | 默认 `upload` |
+| Android key 密码（可选） | `ANDROID_KEY_PASSWORD` | 若与 store 密码不同需配置 |
+
+工作流会在运行时写入 `src-tauri/gen/android/keystore.properties` 以及 keystore 文件，避免泄露到仓库。
+
+### 本地准备
+
+```bash
+# 生成 Tauri 更新密钥（默认保存到 ~/.tauri）
+npm run tauri signer generate -- -w ~/.tauri/story-teller.key
+cat ~/.tauri/story-teller.key      # 填入 TAURI_SIGNING_PRIVATE_KEY
+cat ~/.tauri/story-teller.key.pub  # 填入 TAURI_UPDATER_PUBKEY
+
+# 创建 Android upload keystore
+keytool -genkey -v -keystore upload-keystore.jks \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+base64 upload-keystore.jks         # 填入 ANDROID_KEYSTORE_B64
+```
+
+开发环境下可复制 `.env.example` 为 `.env`，填入上述变量以便调试自动更新。
+
+### 应用内自动更新
+
+- 桌面端已注册 `tauri-plugin-updater` 与 `tauri-plugin-process`，前端的 `useAppUpdater` 会在启动时检测更新。
+- 若发现新版本，会弹出确认对话框，下载完成后自动重启。
+- 请确保 `TAURI_UPDATER_ENDPOINT` 可通过 HTTPS 访问，并与 Release 中的 `latest.json` 地址一致。
+
+### Android 构建
+
+- CI 默认生成 `app-universal-release-signed.apk`，上传到 Release 中，便于旁载或分发到第三方商店。
+- 如需 Play 商店 `.aab`，可在 `scripts/build-apk.sh` 或工作流中新增步骤。
+- 构建日志与产物均可在 Actions 对应工作流页面查看。
 
 ## 📝 许可证
 

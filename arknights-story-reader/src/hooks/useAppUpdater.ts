@@ -60,6 +60,10 @@ export function useAppUpdater() {
         }
       } catch (error) {
         if (cancelled) return;
+        if (error instanceof Error && /plugin/i.test(error.message)) {
+          console.info("[Updater] 当前平台未启用 updater 插件：", error.message);
+          return;
+        }
         console.error("[Updater] 自动更新流程失败", error);
       }
     };
