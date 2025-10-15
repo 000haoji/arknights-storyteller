@@ -1,4 +1,4 @@
-import { ChangeEvent, useCallback, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
@@ -7,6 +7,16 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle, Download, Loader2, RefreshCw, Upload } from "lucide-react";
 import { useDataSyncManager } from "@/hooks/useDataSyncManager";
+import { getVersion as getAppVersion } from "@tauri-apps/api/app";
+import {
+  detectRuntimePlatform,
+  checkDesktopUpdate,
+  installDesktopUpdate,
+  checkAndroidUpdate,
+  installAndroidUpdate,
+  openAndroidInstallPermissionSettings,
+  type UpdateAvailability,
+} from "@/hooks/useAppUpdater";
 
 const THEME_COLOR_OPTIONS = [
   {
@@ -42,6 +52,20 @@ const THEME_COLOR_OPTIONS = [
 export function Settings() {
   const { themeColor, setThemeColor } = useTheme();
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>("");
+  const [updateStatus, setUpdateStatus] = useState<
+    | "idle"
+    | "checking"
+    | "available"
+    | "up-to-date"
+    | "installing"
+    | "installed"
+    | "needs-permission"
+    | "error"
+  >("idle");
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<UpdateAvailability | null>(null);
+  const runtimePlatform = detectRuntimePlatform();
 
   const {
     syncing,
@@ -103,6 +127,90 @@ export function Settings() {
     setError(null);
     window.dispatchEvent(new Event("app:refresh-character-stats"));
   }, []);
+
+  useEffect(() => {
+    if (runtimePlatform === "unknown") return;
+    let cancelled = false;
+    getAppVersion()
+      .then((version) => {
+        if (!cancelled) setAppVersion(version);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersion("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [runtimePlatform]);
+
+  const handleCheckAppUpdate = useCallback(async () => {
+    setUpdateStatus("checking");
+    setUpdateMessage(null);
+    setAvailableUpdate(null);
+    try {
+      if (runtimePlatform === "unknown") {
+        throw new Error("当前环境并非 Tauri 应用，无法检查更新。");
+      }
+
+      if (runtimePlatform === "android") {
+        const result = await checkAndroidUpdate(appVersion || undefined);
+        if (!result) {
+          setUpdateStatus("up-to-date");
+          setUpdateMessage("当前已是最新版本");
+          return;
+        }
+        setAvailableUpdate(result);
+        setUpdateStatus("available");
+      } else {
+        const result = await checkDesktopUpdate(appVersion || undefined);
+        if (!result) {
+          setUpdateStatus("up-to-date");
+          setUpdateMessage("当前已是最新版本");
+          return;
+        }
+        setAvailableUpdate(result);
+        setUpdateStatus("available");
+      }
+    } catch (error) {
+      setUpdateStatus("error");
+      setUpdateMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [runtimePlatform, appVersion]);
+
+  const handleInstallAppUpdate = useCallback(async () => {
+    if (!availableUpdate) return;
+    setUpdateStatus("installing");
+    setUpdateMessage(
+      availableUpdate.platform === "desktop"
+        ? "正在下载并安装最新版本，请稍候..."
+        : "正在下载最新安装包，请稍候..."
+    );
+    try {
+      if (availableUpdate.platform === "desktop") {
+        await installDesktopUpdate(availableUpdate, undefined, { relaunch: true });
+        setUpdateStatus("installed");
+        setUpdateMessage("更新已安装，应用即将重启");
+        setAvailableUpdate(null);
+      } else {
+        const response = await installAndroidUpdate(availableUpdate);
+        if (response?.needsPermission) {
+          await openAndroidInstallPermissionSettings();
+          setUpdateStatus("needs-permission");
+          setUpdateMessage("请在系统设置中允许安装未知来源应用，然后返回应用重新点击“立即更新”。");
+          return;
+        }
+        setUpdateStatus("installed");
+        setUpdateMessage("安装程序已启动，请按照系统提示完成安装。");
+        setAvailableUpdate(null);
+      }
+    } catch (error) {
+      setUpdateStatus("error");
+      setUpdateMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, [availableUpdate]);
+
+  const isCheckingUpdate = updateStatus === "checking";
+  const isInstallingUpdate = updateStatus === "installing";
 
   const renderStatusBadge = () => {
     if (status === "not-installed") {
@@ -336,6 +444,113 @@ export function Settings() {
                 />
             </CardContent>
           </Card>
+
+            <Card
+              className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
+              style={{ animationDelay: "120ms" }}
+            >
+              <CardHeader>
+                <CardTitle>应用更新</CardTitle>
+                <CardDescription>检测更新并触发客户端安装</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <div className="text-xs text-[hsl(var(--color-muted-foreground))]">当前版本</div>
+                    <div className="font-mono text-sm">
+                      {appVersion || (runtimePlatform === "unknown" ? "非 Tauri 环境" : "读取中...")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[hsl(var(--color-muted-foreground))]">运行平台</div>
+                    <div className="text-sm font-medium">
+                      {runtimePlatform === "android"
+                        ? "Android"
+                        : runtimePlatform === "desktop"
+                        ? "桌面端"
+                        : "未知"}
+                    </div>
+                  </div>
+                </div>
+
+                {runtimePlatform === "unknown" ? (
+                  <p className="text-sm text-[hsl(var(--color-muted-foreground))]">
+                    当前环境并非 Tauri 应用，无法检查或安装更新。
+                  </p>
+                ) : null}
+
+                {updateStatus === "available" && availableUpdate ? (
+                  <div className="rounded-lg border border-dashed border-[hsl(var(--color-border))] bg-[hsl(var(--color-accent)/0.35)] p-3 space-y-2">
+                    <div className="font-medium">
+                      {availableUpdate.platform === "desktop" ? "桌面端" : "Android"} 新版本
+                      {" "}
+                      {availableUpdate.platform === "desktop"
+                        ? availableUpdate.availableVersion
+                        : availableUpdate.manifest.version}
+                    </div>
+                    {availableUpdate.platform === "desktop" && availableUpdate.notes ? (
+                      <p className="text-xs leading-relaxed text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap">
+                        {availableUpdate.notes}
+                      </p>
+                    ) : null}
+                    {availableUpdate.platform === "android" && availableUpdate.manifest.notes ? (
+                      <p className="text-xs leading-relaxed text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap">
+                        {availableUpdate.manifest.notes}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {updateStatus === "up-to-date" ? (
+                  <p className="text-sm text-[hsl(var(--color-success))]">当前已是最新版本。</p>
+                ) : null}
+
+                {updateStatus === "needs-permission" ? (
+                  <p className="text-sm text-[hsl(var(--color-warning))]">
+                    已打开系统授权界面，请允许安装未知来源应用后返回继续。
+                  </p>
+                ) : null}
+
+                {updateMessage && updateStatus !== "available" ? (
+                  <p
+                    className={cn(
+                      "text-sm",
+                      updateStatus === "error"
+                        ? "text-[hsl(var(--color-destructive))]"
+                        : "text-[hsl(var(--color-muted-foreground))]"
+                    )}
+                  >
+                    {updateMessage}
+                  </p>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCheckAppUpdate}
+                    disabled={runtimePlatform === "unknown" || isCheckingUpdate || isInstallingUpdate}
+                  >
+                    {isCheckingUpdate ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                    )}
+                    检查更新
+                  </Button>
+                  {availableUpdate ? (
+                    <Button type="button" onClick={handleInstallAppUpdate} disabled={isInstallingUpdate}>
+                      {isInstallingUpdate ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="mr-2 h-4 w-4" />
+                      )}
+                      立即更新
+                    </Button>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
 
           <Card className="motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500" style={{ animationDelay: "70ms" }}>
             <CardHeader>
