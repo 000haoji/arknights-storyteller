@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
 
 jobs:
   publish-tauri:
@@ -83,7 +84,7 @@ jobs:
   android:
     name: Build signed Android APK
     needs: publish-tauri
-    if: ${{ needs.publish-tauri.outputs.release_id != '' }}
+    if: needs.publish-tauri.outputs.release_id != '' && env.ANDROID_KEYSTORE_B64 != ''
     runs-on: ubuntu-22.04
     permissions:
       contents: write
