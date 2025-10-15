@@ -7,6 +7,11 @@ on:
       - release
 
 
+defaults:
+  run:
+    working-directory: arknights-story-reader
+
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -50,6 +55,7 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+          cache-dependency-path: arknights-story-reader/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -59,7 +65,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: ./src-tauri -> target
+          workspaces: arknights-story-reader/src-tauri -> target
 
       - name: Install frontend dependencies
         run: npm ci
@@ -74,6 +80,7 @@ jobs:
           TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
           TAURI_UPDATER_ENDPOINT: ${{ secrets.TAURI_UPDATER_ENDPOINT }}
         with:
+          projectPath: arknights-story-reader
           tagName: app-v__VERSION__
           releaseName: 明日方舟剧情阅读器 v__VERSION__
           releaseBody: |
@@ -112,6 +119,7 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+          cache-dependency-path: arknights-story-reader/package-lock.json
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -137,7 +145,7 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: ./src-tauri -> target
+          workspaces: arknights-story-reader/src-tauri -> target
 
       - name: Install frontend dependencies
         run: npm ci
@@ -148,12 +156,12 @@ jobs:
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
 
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          cat <<'EOF' > src-tauri/gen/android/keystore.properties
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=${ANDROID_KEY_ALIAS}
-          storeFile=${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
-          EOF
+          cat <<EOF > src-tauri/gen/android/keystore.properties
+storePassword=$ANDROID_KEYSTORE_PASSWORD
+keyPassword=$KEY_PASSWORD
+keyAlias=${ANDROID_KEY_ALIAS}
+storeFile=$GITHUB_WORKSPACE/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
+EOF
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -162,7 +170,7 @@ jobs:
 
       - name: Build signed Android APK
         env:
-          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -190,14 +198,14 @@ jobs:
           VERSION="${{ needs.publish-tauri.outputs.app_version }}"
           APK_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
           JSON_PATH="android-latest.json"
-          cat <<'EOF' > "$JSON_PATH"
-          {
-            "version": "$VERSION",
-            "notes": "",
-            "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
-            "fileName": "$APK_NAME"
-          }
-          EOF
+          cat <<EOF > "$JSON_PATH"
+{
+  "version": "$VERSION",
+  "notes": "",
+  "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
+  "fileName": "$APK_NAME"
+}
+EOF
           gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
 
       - name: Cleanup keystore
