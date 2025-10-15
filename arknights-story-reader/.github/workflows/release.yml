@@ -83,7 +83,7 @@ jobs:
   android:
     name: Build signed Android APK
     needs: publish-tauri
-    if: needs.publish-tauri.outputs.release_id != ''
+    if: ${{ needs.publish-tauri.outputs.release_id != '' }}
     runs-on: ubuntu-22.04
     permissions:
       contents: write
