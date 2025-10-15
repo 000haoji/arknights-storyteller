@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { buildShareCode, parseShareCode, digestToHex64 } from "@/lib/clueCodecs";
+import type { EncodedCluePayloadV1 } from "@/lib/clueCodecs";
 
 export interface ClueItem {
   storyId: string;

@@ -105,25 +105,6 @@ function base64urlDecode(s: string): Uint8Array {
   return out;
 }
 
-// Compression helpers (best-effort). Fallback to no compression when unsupported.
-async function deflate(bytes: Uint8Array): Promise<Uint8Array> {
-  // @ts-ignore
-  if (typeof CompressionStream === "function") {
-    try {
-      // @ts-ignore
-      const cs = new CompressionStream("deflate");
-      const writer = (cs.writable as WritableStream<Uint8Array>).getWriter();
-      await writer.write(bytes);
-      await writer.close();
-      const res = await new Response((cs.readable as ReadableStream<Uint8Array>)).arrayBuffer();
-      return new Uint8Array(res);
-    } catch {
-      // ignore and fallback
-    }
-  }
-  return bytes; // fallback no compression
-}
-
 async function inflate(bytes: Uint8Array): Promise<Uint8Array> {
   // @ts-ignore
   if (typeof DecompressionStream === "function") {

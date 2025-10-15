@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Share2, Trash2, Plus, Copy, Pencil, ArrowDown, BookOpen, ArrowUp } from "lucide-react";
 import { api } from "@/services/api";
 import type { StoryEntry } from "@/types/story";
-import { normalizeForDigest, fnv1a64, digestToHex64 } from "@/lib/clueCodecs";
+// import helpers removed since the highlight-import feature is currently disabled
 import { Collapsible } from "@/components/ui/collapsible";
 
 interface ClueSetsPanelProps {
@@ -212,113 +212,7 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
     return () => { cancelled = true; };
   }, [sortedSets, storyCache, updateItemMeta]);
 
-  // 从“划线收藏”导入到某个线索集
-  const handleImportFromHighlights = useCallback(async (targetSetId: string) => {
-    try {
-      setBusySetId(targetSetId);
-      // 1) 读取本地划线
-      const raw = localStorage.getItem("reader-highlights");
-      if (!raw) {
-        setMessage("暂无划线可导入");
-        setTimeout(() => setMessage(null), 1500);
-        return;
-      }
-      const store = JSON.parse(raw) as Record<string, number[]>;
-      const entries = Object.entries(store).filter(([, arr]) => Array.isArray(arr) && arr.length > 0);
-      if (entries.length === 0) {
-        setMessage("暂无划线可导入");
-        setTimeout(() => setMessage(null), 1500);
-        return;
-      }
-
-      // 2) 构建 storyTxt -> StoryEntry 映射
-      // 通过分类 API 扫描所有剧情条目（本地数据，速度可接受）
-      const categories = await api.getStoryCategories();
-      const pathMap = new Map<string, StoryEntry>();
-      categories.forEach((cat) => {
-        (cat.stories || []).forEach((se: StoryEntry) => pathMap.set(se.storyTxt, se));
-      });
-
-      // 3) 遍历每个 storyPath，取内容并生成条目
-      const toAdd: Array<{ storyId: string; segmentIndex: number; preview?: string; digestHex?: string }> = [];
-      for (const [storyPath, idxArr] of entries) {
-        const entry = pathMap.get(storyPath);
-        if (!entry) continue;
-        const content = await api.getStoryContent(storyPath);
-        // 清洗与合并（与 Reader 相同的规则的简化实现）
-        const cleaned = content.segments.flatMap((segment: any) => {
-          if (segment.type === "dialogue" || segment.type === "narration") {
-            const normalizedText = String(segment.text || "")
-              .replace(/\r\n/g, "\n")
-              .split("\n").map((line: string) => line.trim()).filter(Boolean).join("\n");
-            if (!normalizedText) return [] as any[];
-            if (normalizedText === segment.text) return [segment];
-            return [{ ...segment, text: normalizedText }];
-          }
-          if (segment.type === "decision") {
-            const options = (segment.options || []).map((o: string) => String(o || "").trim()).filter(Boolean);
-            if (options.length === 0) return [] as any[];
-            if (options.length === segment.options.length) return [segment];
-            return [{ ...segment, options }];
-          }
-          return [segment];
-        });
-        const merged: any[] = [];
-        cleaned.forEach((segment: any) => {
-          if (segment.type === "dialogue") {
-            const last = merged[merged.length - 1];
-            if (last && last.type === "dialogue" && last.characterName === segment.characterName) {
-              merged[merged.length - 1] = { ...last, text: `${last.text}\n${segment.text}`.replace(/\n{2,}/g, "\n") };
-              return;
-            }
-          }
-          merged.push(segment);
-        });
-        const getPreview = (seg: any) => {
-          switch (seg.type) {
-            case "dialogue": {
-              const primary = String(seg.text || "").split("\n")[0] ?? "";
-              return `${seg.characterName}: ${primary}`.replace(/\s+/g, " ").trim();
-            }
-            case "narration":
-            case "system":
-            case "subtitle":
-            case "sticker":
-              return String(seg.text || "").split("\n")[0]?.replace(/\s+/g, " ").trim() ?? "";
-            default:
-              return "";
-          }
-        };
-        const getDigest = (seg: any) => digestToHex64(fnv1a64(normalizeForDigest(seg.type === 'dialogue' ? `${seg.characterName} ${seg.text}` : seg.type === 'system' && seg.speaker ? `${seg.speaker} ${seg.text}` : (seg.text || ''))));
-
-        const uniq = new Set<number>();
-        idxArr.forEach((n) => { if (Number.isFinite(n)) uniq.add(n|0); });
-        for (const idx of uniq) {
-          const seg = merged[idx];
-          if (!seg) continue;
-          const preview = getPreview(seg);
-          const digestHex = getDigest(seg);
-          toAdd.push({ storyId: entry.storyId, segmentIndex: idx, preview, digestHex });
-        }
-      }
-
-      if (toAdd.length === 0) {
-        setMessage("没有可导入的划线");
-        setTimeout(() => setMessage(null), 1500);
-        return;
-      }
-
-      addItems(targetSetId, toAdd);
-      setMessage(`已导入 ${toAdd.length} 条划线`);
-      setTimeout(() => setMessage(null), 1500);
-    } catch (err) {
-      console.error(err);
-      setMessage("导入划线失败");
-      setTimeout(() => setMessage(null), 2000);
-    } finally {
-      setBusySetId(null);
-    }
-  }, [addItems]);
+  // “从划线导入”功能暂不启用，避免未使用函数导致的构建错误。
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -346,7 +240,7 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
       </header>
 
       <main className="flex-1 overflow-hidden">
-        <CustomScrollArea className="h-full" viewportClassName="reader-scroll" trackOffsetTop="calc(4rem + 20px)" trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))">
+        <CustomScrollArea className="h-full" viewportClassName="reader-scroll" trackOffsetTop="calc(4rem + 10px)" trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))">
           <div className="container py-6 pb-24 space-y-4">
             <Collapsible title="使用指南" defaultOpen={true}>
               <div className="text-sm leading-relaxed space-y-2 px-1">

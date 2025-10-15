@@ -50,10 +50,9 @@ export function useReaderSettings() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as Partial<ReaderSettings>;
-        const fontFamily = FONT_FAMILY_VALUES.has(parsed.fontFamily ?? "")
-          ? parsed.fontFamily
-          : DEFAULT_SETTINGS.fontFamily;
-        return { ...DEFAULT_SETTINGS, ...parsed, fontFamily };
+        const ff = parsed.fontFamily;
+        const fontFamily: string = ff && FONT_FAMILY_VALUES.has(ff) ? ff : DEFAULT_SETTINGS.fontFamily;
+        return { ...DEFAULT_SETTINGS, ...parsed, fontFamily } as ReaderSettings;
       } catch {
         return DEFAULT_SETTINGS;
       }

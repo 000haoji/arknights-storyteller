@@ -13,6 +13,7 @@ import { ClueSetsPanel } from "@/components/ClueSetsPanel";
 import { ClueSetReader } from "@/components/ClueSetReader";
 import { KeepAlive } from "@/components/KeepAlive";
 import { CharactersPanel } from "@/components/CharactersPanel";
+import { useAppUpdater } from "@/hooks/useAppUpdater";
 
 type Tab = "stories" | "characters" | "search" | "clues" | "settings";
 
@@ -24,6 +25,7 @@ interface ReaderFocus {
 }
 
 function App() {
+  useAppUpdater();
   const [activeTab, setActiveTab] = useState<Tab>("stories");
   const [readerVisible, setReaderVisible] = useState(false);
   const [readerStory, setReaderStory] = useState<StoryEntry | null>(null);

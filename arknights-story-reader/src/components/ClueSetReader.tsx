@@ -82,22 +82,6 @@ function segmentSearchText(seg: StorySegment): string {
   }
 }
 
-function getPreview(seg: StorySegment): string {
-  switch (seg.type) {
-    case "dialogue": {
-      const primary = seg.text.split("\n")[0] ?? "";
-      return `${seg.characterName}: ${primary}`.replace(/\s+/g, " ").trim();
-    }
-    case "narration":
-    case "system":
-    case "subtitle":
-    case "sticker":
-      return (seg.text.split("\n")[0] ?? "").replace(/\s+/g, " ").trim();
-    default:
-      return "";
-  }
-}
-
 function digestHexFor(seg: StorySegment): string {
   const d = fnv1a64(normalizeForDigest(segmentSearchText(seg)));
   return digestToHex64(d);
@@ -106,8 +90,7 @@ function digestHexFor(seg: StorySegment): string {
 export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReaderProps) {
   const { sets } = useClueSets();
   const set = sets[setId];
-  const [storyMap, setStoryMap] = useState<Record<string, StoryEntry>>({});
-  const [segmentsMap, setSegmentsMap] = useState<Record<string, StorySegment[]>>({});
+  // Local maps were previously stored but not used outside initialization; remove to satisfy TS strict rules
   const [items, setItems] = useState<RenderItem[]>([]);
   const anchorRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const { settings, updateSettings, resetSettings } = useReaderSettings();
@@ -174,8 +157,6 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
         }
       }
       if (cancelled) return;
-      setStoryMap(entries);
-
       const segs: Record<string, StorySegment[]> = {};
       for (const sid of storyIds) {
         const entry = entries[sid];
@@ -188,8 +169,6 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
         }
       }
       if (cancelled) return;
-      setSegmentsMap(segs);
-
       const renderItems: RenderItem[] = set.items.map((it, index) => {
         const story = entries[it.storyId];
         const arr = segs[it.storyId] ?? [];
@@ -235,10 +214,7 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
     return () => { cancelled = true; };
   }, [set?.updatedAt, setId]);
 
-  const scrollToKey = useCallback((key: string) => {
-    const el = anchorRefs.current[key];
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+  // Helper no longer needed; removed to satisfy noUnusedLocals
 
   // 分组：保持“第一次出现”的关卡顺序，组内维持线索集原有顺序
   const groups = useMemo(() => {
@@ -302,8 +278,8 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
       </header>
 
       <main className="flex-1 overflow-hidden">
-        <CustomScrollArea className="h-full" viewportClassName="reader-scroll" viewportRef={scrollViewportRef as any}
-          trackOffsetTop="calc(4rem + 20px)" trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))">
+          <CustomScrollArea className="h-full" viewportClassName="reader-scroll" viewportRef={scrollViewportRef as any}
+          trackOffsetTop="calc(4rem + 10px)" trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))">
           <div className="container py-6 pb-24">
             {(!set || set.items.length === 0) && (
               <div className="text-center text-[hsl(var(--color-muted-foreground))]">该线索集暂无条目</div>
@@ -317,7 +293,7 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
               maxWidth: `${Math.round((settings.pageWidth / 100) * 768)}px`,
               width: '100%'
             }}>
-              {groups.map((group, gIndex) => {
+              {groups.map((group) => {
                 // 按原文顺序渲染：优先用 resolvedIndex，否则用 segmentIndex
                 const sortedItems = [...group.items].sort((a, b) => {
                   const ai = (a.resolvedIndex ?? a.segmentIndex) ?? 0;
@@ -393,11 +369,25 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
                               {it.segment.type === 'dialogue' && (
                                 <>
                                   <div className="reader-character-name">{it.segment.characterName}</div>
-                                  <div className="reader-text">{it.segment.text.split('\n').map((line, i) => (<span key={i}>{line}{i < it.segment!.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
+                                  <div className="reader-text">{it.segment.text.split('\n').map((line: string, i: number) => (<span key={i}>{line}{i < it.segment.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
                                 </>
                               )}
-                              {it.segment.type !== 'dialogue' && (
-                                <div className="reader-text">{it.segment.text.split('\n').map((line, i) => (<span key={i}>{line}{i < it.segment!.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
+                              {(it.segment.type === 'narration' || it.segment.type === 'system' || it.segment.type === 'subtitle' || it.segment.type === 'sticker') && (
+                                <div className="reader-text">{it.segment.text.split('\n').map((line: string, i: number) => (<span key={i}>{line}{i < it.segment.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
+                              )}
+                              {it.segment.type === 'decision' && (
+                                <div className="reader-decision">
+                                  <div className="reader-decision-title">选择：</div>
+                                  {it.segment.options.map((option, optionIndex) => (
+                                    <div key={optionIndex} className="reader-decision-option">
+                                      <span className="reader-decision-bullet">{optionIndex + 1}</span>
+                                      <span>{option}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {it.segment.type === 'header' && (
+                                <div className="reader-header">{it.segment.title}</div>
                               )}
                             </div>
                           )}

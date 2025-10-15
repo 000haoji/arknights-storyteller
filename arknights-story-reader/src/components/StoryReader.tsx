@@ -20,7 +20,6 @@ import {
   Settings as SettingsIcon,
   Trash2,
   Star,
-  Plus,
   Check,
 } from "lucide-react";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
@@ -96,17 +95,14 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const pendingScrollIndexRef = useRef<number | null>(null);
   const jumpAppliedRef = useRef<number | null>(null);
   const [cluePickerOpen, setCluePickerOpen] = useState(false);
-  const [cluePickerIndex, setCluePickerIndex] = useState<number | null>(null);
   const [cluePickerTitle, setCluePickerTitle] = useState<string>("");
-  const [cluePickerMode, setCluePickerMode] = useState<"single" | "bulk">("single");
-  const [cluePickerBulk, setCluePickerBulk] = useState<number[] | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { showSummaries } = useAppPreferences();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { sets: clueSets, addItem, addItems, createSet, removeItem, ensureDefaultSetId } = useClueSets();
+  const { sets: clueSets, addItem, createSet, removeItem, ensureDefaultSetId } = useClueSets();
 
   const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
@@ -760,20 +756,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     [activeCharacter, jumpToSegment]
   );
 
-  const handleAddHighlightToClueSet = useCallback((index: number) => {
-    // simplified flow: toggle highlight already auto-add, so this becomes no-op
+  const confirmAddToSet = useCallback(() => {
     setCluePickerOpen(false);
-  }, []);
-
-  const handleBulkAddHighlights = useCallback(() => {
-    // simplified: already auto-added on highlight; keep as no-op
-    setCluePickerOpen(false);
-  }, []);
-
-  const confirmAddToSet = useCallback((setId: string) => {
-    setCluePickerOpen(false);
-    setCluePickerIndex(null);
-    setCluePickerBulk(null);
     setCluePickerTitle("");
   }, []);
 
@@ -1383,7 +1367,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                       Object.values(clueSets)
                         .sort((a, b) => b.updatedAt - a.updatedAt)
                         .map((s) => (
-                          <button key={s.id} className="w-full px-3 py-2 text-left hover:bg-[hsl(var(--color-accent))] border-b last:border-b-0" onClick={() => confirmAddToSet(s.id)}>
+                          <button key={s.id} className="w-full px-3 py-2 text-left hover:bg-[hsl(var(--color-accent))] border-b last:border-b-0" onClick={() => confirmAddToSet()}>
                             <div className="text-sm">{s.title}</div>
                             <div className="text-[10px] text-[hsl(var(--color-muted-foreground))]">{s.items.length} 条</div>
                           </button>
@@ -1396,8 +1380,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                   <div className="flex items-center gap-2">
                     <Input placeholder="线索集名称" value={cluePickerTitle} onChange={(e) => setCluePickerTitle(e.target.value)} />
                     <Button onClick={() => {
-                      const id = createSet(cluePickerTitle.trim() || "我的线索集");
-                      confirmAddToSet(id);
+                      createSet(cluePickerTitle.trim() || "我的线索集");
+                      confirmAddToSet();
                     }} disabled={!cluePickerTitle.trim()}>
                       新建并加入
                     </Button>
