@@ -131,12 +131,12 @@ jobs:
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
 
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          cat <<EOF > src-tauri/gen/android/keystore.properties
-storePassword=$ANDROID_KEYSTORE_PASSWORD
-keyPassword=$KEY_PASSWORD
-keyAlias=${ANDROID_KEY_ALIAS}
-storeFile=${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
-EOF
+          cat <<'EOF' > src-tauri/gen/android/keystore.properties
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
+          EOF
         env:
           ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -173,14 +173,14 @@ EOF
           VERSION="${{ needs.publish-tauri.outputs.app_version }}"
           APK_NAME="arknights-story-reader-android-${{ needs.publish-tauri.outputs.app_version }}.apk"
           JSON_PATH="android-latest.json"
-          cat <<EOF > "$JSON_PATH"
-{
-  "version": "$VERSION",
-  "notes": "",
-  "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
-  "fileName": "$APK_NAME"
-}
-EOF
+          cat <<'EOF' > "$JSON_PATH"
+          {
+            "version": "$VERSION",
+            "notes": "",
+            "url": "https://github.com/${{ github.repository }}/releases/download/$TAG/$APK_NAME",
+            "fileName": "$APK_NAME"
+          }
+          EOF
           gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
 
       - name: Cleanup keystore
