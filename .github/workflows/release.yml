@@ -6,9 +6,9 @@ on:
     branches:
       - release
 
+
 env:
   CARGO_TERM_COLOR: always
-  ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
 
 jobs:
   publish-tauri:
@@ -81,10 +81,26 @@ jobs:
           releaseDraft: true
           args: ${{ matrix.args }}
 
+  check-android-secrets:
+    name: Check Android signing secrets
+    runs-on: ubuntu-24.04
+    outputs:
+      has_keystore: ${{ steps.check.outputs.has_keystore }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "has_keystore=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_keystore=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+
   android:
     name: Build signed Android APK
-    needs: publish-tauri
-    if: needs.publish-tauri.outputs.release_id != '' && env.ANDROID_KEYSTORE_B64 != ''
+    needs: [publish-tauri, check-android-secrets]
+    if: needs.publish-tauri.outputs.release_id != '' && needs.check-android-secrets.outputs.has_keystore == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
