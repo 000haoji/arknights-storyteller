@@ -333,36 +333,40 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
                   return v ?? 0;
                 })();
                 const story = group.story;
+                const chapterLabel = story
+                  ? (chapterNameByStoryGroup[story.storyGroup] ?? chapterNameByStoryId[story.storyId] ?? (story.storyGroup ? (chapterMap[story.storyGroup] ?? story.storyGroup) : ""))
+                  : "";
                 return (
                   <div key={group.storyId} className="mb-8">
                     <div className="mb-3">
-                      <div className="flex items-center gap-2">
-                        <div className="reader-header flex-1">{story?.storyName ?? group.storyId}</div>
-                        {story?.avgTag && (
-                          <span className="text-xs text-[hsl(var(--color-muted-foreground))]">{story.avgTag}</span>
-                        )}
-                        {story && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="打开整章"
-                            title="打开整章"
-                            onClick={() => onOpenStoryJump(story, { segmentIndex: firstResolved })}
-                          >
-                            <BookOpen className="h-4 w-4" />
-                          </Button>
-                        )}
+                      {/* 采用三列自适应栅格，确保中间标题真正居中 */}
+                      <div className="grid items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                        <div />
+                        <div className="reader-header text-center">{story?.storyName ?? group.storyId}</div>
+                        <div className="flex items-center justify-end gap-2">
+                          {story?.avgTag && (
+                            <span className="text-xs text-[hsl(var(--color-muted-foreground))]">{story.avgTag}</span>
+                          )}
+                          {story && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="打开整章"
+                              title="打开整章"
+                              onClick={() => onOpenStoryJump(story, { segmentIndex: firstResolved })}
+                            >
+                              <BookOpen className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-[hsl(var(--color-muted-foreground))] flex items-center gap-3">
-                        {story?.storyCode && <span>{story.storyCode}</span>}
-                        {story && (
-                          <span>{
-                            chapterNameByStoryGroup[story.storyGroup] ??
-                            chapterNameByStoryId[story.storyId] ??
-                            (story.storyGroup ? (chapterMap[story.storyGroup] ?? story.storyGroup) : '')
-                          }</span>
-                        )}
-                        <span className="ml-auto">{group.items.length} 条</span>
+                      <div className="grid items-center mt-1 text-xs text-[hsl(var(--color-muted-foreground))]" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
+                        <div />
+                        <div className="flex items-center gap-3 justify-center">
+                          {story?.storyCode && <span>{story.storyCode}</span>}
+                          {chapterLabel && <span>{chapterLabel}</span>}
+                        </div>
+                        <div className="text-right">{group.items.length} 条</div>
                       </div>
                     </div>
                     {sortedItems.map((it, idxInGroup) => {

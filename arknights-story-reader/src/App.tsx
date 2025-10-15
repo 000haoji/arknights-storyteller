@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { ClueSetsProvider } from "@/hooks/useClueSets";
+import { AppPreferencesProvider } from "@/hooks/useAppPreferences";
 import { ClueSetsPanel } from "@/components/ClueSetsPanel";
 import { ClueSetReader } from "@/components/ClueSetReader";
 import { KeepAlive } from "@/components/KeepAlive";
@@ -195,9 +196,11 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
       <FavoritesProvider>
-        <ClueSetsProvider>
-          {appContent}
-        </ClueSetsProvider>
+        <AppPreferencesProvider>
+          <ClueSetsProvider>
+            {appContent}
+          </ClueSetsProvider>
+        </AppPreferencesProvider>
       </FavoritesProvider>
     </ThemeProvider>
   );

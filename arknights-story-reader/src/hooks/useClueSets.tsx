@@ -251,12 +251,29 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
   const exportShareCode = useCallback(async (setId: string) => {
     const set = state.sets[setId];
     if (!set) throw new Error("Set not found");
-    const storyIds = Array.from(new Set(set.items.map((it) => it.storyId)));
+    // Group items by story, keep story order by first appearance in current set.items
+    const firstIndex = new Map<string, number>();
+    const grouped = new Map<string, ClueItem[]>();
+    set.items.forEach((it, idx) => {
+      if (!firstIndex.has(it.storyId)) firstIndex.set(it.storyId, idx);
+      const arr = grouped.get(it.storyId) ?? [];
+      arr.push(it);
+      grouped.set(it.storyId, arr);
+    });
+    // Determine story order by first occurrence (aligns with current group-level排序)
+    const storyIds = Array.from(grouped.keys()).sort((a, b) => (firstIndex.get(a)! - firstIndex.get(b)!));
+    // Within each story, sort by segmentIndex ascending to ensure原文顺序
+    const orderedItems: ClueItem[] = [];
+    storyIds.forEach((sid) => {
+      const arr = grouped.get(sid)!;
+      arr.sort((a, b) => a.segmentIndex - b.segmentIndex);
+      orderedItems.push(...arr);
+    });
+
     const storyIndexMap = new Map<string, number>(storyIds.map((id, i) => [id, i]));
-    const items = set.items.map((it) => ({
+    const items = orderedItems.map((it) => ({
       storyIndex: storyIndexMap.get(it.storyId)!,
       segmentIndex: it.segmentIndex,
-      // If digest missing, encode 0; recommended to include digest when adding items
       digest64: BigInt(`0x${(it.digestHex ?? "").padStart(16, "0")}`),
     }));
     const payload: EncodedCluePayloadV1 = { version: 1, stories: storyIds, items };

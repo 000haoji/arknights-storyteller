@@ -373,7 +373,7 @@ export function Settings() {
               <CardContent className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-[hsl(var(--color-muted-foreground))]">版本</span>
-                  <span>1.0.0</span>
+                  <span>1.10</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[hsl(var(--color-muted-foreground))]">作者</span>

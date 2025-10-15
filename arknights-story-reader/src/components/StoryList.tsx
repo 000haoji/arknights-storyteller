@@ -8,6 +8,7 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useAppPreferences } from "@/hooks/useAppPreferences";
 
 const CATEGORY_TABS = [
   { id: "favorites" as const, label: "收藏" },
@@ -50,10 +51,11 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryLoaded, setMemoryLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [summaryVisibility, setSummaryVisibility] = useState<Record<string, boolean>>({});
+  const { showSummaries, setShowSummaries } = useAppPreferences();
   const [summaryCache, setSummaryCache] = useState<Record<string, string>>({});
   const [summaryLoadingIds, setSummaryLoadingIds] = useState<Record<string, boolean>>({});
-  const [memorySummaryVisible, setMemorySummaryVisible] = useState(false);
+  // memorySummaryVisible 改为全局控制
+  const memorySummaryVisible = showSummaries;
   const {
     favoriteStories,
     favoriteGroups,
@@ -533,10 +535,10 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   };
 
   useEffect(() => {
-    if (memorySummaryVisible && memoryStories.length > 0) {
+    if (showSummaries && memoryStories.length > 0) {
       ensureSummariesForStories(memoryStories);
     }
-  }, [memorySummaryVisible, memoryStories, ensureSummariesForStories]);
+  }, [showSummaries, memoryStories, ensureSummariesForStories]);
 
   if (loading) {
     return (
@@ -600,20 +602,27 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                   </Button>
                 ))}
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              {/* 顶部行：左侧摘要文本，右侧全局简介开关 */}
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm text-[hsl(var(--color-muted-foreground))]">
                   {activeSummary}
                 </span>
-                <div className="w-full sm:w-auto">
-                  <Input
-                    type="search"
-                    value={searchTerm}
-                    onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="搜索剧情标题或编号"
-                    aria-label="搜索剧情标题或编号"
-                    className="w-full sm:w-64 md:w-72"
-                  />
-                </div>
+                <SummaryToggleButton
+                  enabled={showSummaries}
+                  onToggle={() => setShowSummaries(!showSummaries)}
+                  label="简介"
+                />
+              </div>
+              {/* 第二行：搜索框独占一行 */}
+              <div>
+                <Input
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="搜索剧情标题或编号"
+                  aria-label="搜索剧情标题或编号"
+                  className="w-full sm:w-80 md:w-96"
+                />
               </div>
             </div>
 
@@ -625,14 +634,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                     const groupKey = fullStories[0]?.storyGroup || chapterName;
                     const groupId = `chapter:${groupKey}`;
                     const chapterFavorite = isGroupFavorite(groupId);
-                    const summaryEnabled = summaryVisibility[groupId] ?? false;
-                    const handleSummaryToggle = () => {
-                      const next = !summaryEnabled;
-                      setSummaryVisibility((prev) => ({ ...prev, [groupId]: next }));
-                      if (!summaryEnabled) {
-                        ensureSummariesForStories(fullStories);
-                      }
-                    };
+                    const summaryEnabled = showSummaries;
                     return (
                       <Collapsible
                         key={`chapter-${index}`}
@@ -640,11 +642,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         defaultOpen={index === 0}
                         actions={
                           <div className="flex items-center gap-2">
-                            <SummaryToggleButton
-                              enabled={summaryEnabled}
-                              onToggle={handleSummaryToggle}
-                              label="简介"
-                            />
                             <GroupFavoriteButton
                               isFavorite={chapterFavorite}
                               onToggle={() =>
@@ -698,14 +695,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       const groupKey = fullStories[0]?.storyGroup || activityName;
                       const groupId = `activity:${groupKey}`;
                       const activityFavorite = isGroupFavorite(groupId);
-                      const summaryEnabled = summaryVisibility[groupId] ?? false;
-                      const handleSummaryToggle = () => {
-                        const next = !summaryEnabled;
-                        setSummaryVisibility((prev) => ({ ...prev, [groupId]: next }));
-                        if (!summaryEnabled) {
-                          ensureSummariesForStories(fullStories);
-                        }
-                      };
+                      const summaryEnabled = showSummaries;
                       return (
                         <Collapsible
                           key={`activity-${index}`}
@@ -713,11 +703,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                           defaultOpen={index === 0}
                           actions={
                             <div className="flex items-center gap-2">
-                              <SummaryToggleButton
-                                enabled={summaryEnabled}
-                                onToggle={handleSummaryToggle}
-                                label="简介"
-                              />
                               <GroupFavoriteButton
                                 isFavorite={activityFavorite}
                                 onToggle={() =>
@@ -765,14 +750,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       const groupKey = fullStories[0]?.storyGroup || name;
                       const groupId = `sidestory:${groupKey}`;
                       const fav = isGroupFavorite(groupId);
-                      const summaryEnabled = summaryVisibility[groupId] ?? false;
-                      const handleSummaryToggle = () => {
-                        const next = !summaryEnabled;
-                        setSummaryVisibility((prev) => ({ ...prev, [groupId]: next }));
-                        if (!summaryEnabled) {
-                          ensureSummariesForStories(fullStories);
-                        }
-                      };
+                      const summaryEnabled = showSummaries;
                       return (
                         <Collapsible
                           key={`sidestory-${index}`}
@@ -780,11 +758,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                           defaultOpen={index === 0}
                           actions={
                             <div className="flex items-center gap-2">
-                              <SummaryToggleButton
-                                enabled={summaryEnabled}
-                                onToggle={handleSummaryToggle}
-                                label="简介"
-                              />
                               <GroupFavoriteButton
                                 isFavorite={fav}
                                 onToggle={() =>
@@ -827,14 +800,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       const groupKey = fullStories[0]?.storyGroup || name;
                       const groupId = `roguelike:${groupKey}`;
                       const fav = isGroupFavorite(groupId);
-                      const summaryEnabled = summaryVisibility[groupId] ?? false;
-                      const handleSummaryToggle = () => {
-                        const next = !summaryEnabled;
-                        setSummaryVisibility((prev) => ({ ...prev, [groupId]: next }));
-                        if (!summaryEnabled) {
-                          ensureSummariesForStories(fullStories);
-                        }
-                      };
+                      const summaryEnabled = showSummaries;
                       return (
                         <Collapsible
                           key={`roguelike-${index}`}
@@ -842,11 +808,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                           defaultOpen={index === 0}
                           actions={
                             <div className="flex items-center gap-2">
-                              <SummaryToggleButton
-                                enabled={summaryEnabled}
-                                onToggle={handleSummaryToggle}
-                                label="简介"
-                              />
                               <GroupFavoriteButton
                                 isFavorite={fav}
                                 onToggle={() =>
@@ -879,19 +840,6 @@ export function StoryList({ onSelectStory }: StoryListProps) {
 
               {activeCategory === "memory" && (
                 <div className="space-y-2">
-                  <div className="flex justify-end">
-                    <SummaryToggleButton
-                      enabled={memorySummaryVisible}
-                      onToggle={() => {
-                        const next = !memorySummaryVisible;
-                        setMemorySummaryVisible(next);
-                        if (!memorySummaryVisible && memoryStories.length > 0) {
-                          ensureSummariesForStories(memoryStories);
-                        }
-                      }}
-                      label="简介"
-                    />
-                  </div>
                   {memoryLoading && <EmptyState message="干员密录加载中..." />}
                   {!memoryLoading && filteredMemoryStories.length === 0 && (
                     <EmptyState
@@ -947,6 +895,10 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                               onSelectStory={onSelectStory}
                               isFavorite={isFavorite(story.storyId)}
                               onToggleFavorite={() => toggleFavorite(story)}
+                              showSummary={showSummaries}
+                              summary={summaryCache[story.storyId]}
+                              summaryLoading={Boolean(summaryLoadingIds[story.storyId])}
+                              onRequestSummary={handleRequestSummary}
                             />
                           ))}
                         </Collapsible>
@@ -979,6 +931,10 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                               onSelectStory={onSelectStory}
                               isFavorite={true}
                               onToggleFavorite={() => toggleFavorite(story)}
+                              showSummary={showSummaries}
+                              summary={summaryCache[story.storyId]}
+                              summaryLoading={Boolean(summaryLoadingIds[story.storyId])}
+                              onRequestSummary={handleRequestSummary}
                             />
                           ))}
                         </Collapsible>

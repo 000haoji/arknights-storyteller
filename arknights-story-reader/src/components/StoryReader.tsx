@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAppPreferences } from "@/hooks/useAppPreferences";
 import type { StoryEntry } from "@/types/story";
 import { fnv1a64, normalizeForDigest, digestToHex64 } from "@/lib/clueCodecs";
 
@@ -101,6 +102,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const [cluePickerBulk, setCluePickerBulk] = useState<number[] | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
+  const { showSummaries } = useAppPreferences();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
   const { isFavorite, toggleFavorite } = useFavorites();
@@ -1134,7 +1136,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         >
           <div className="container py-8 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
             <div className="reader-content motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700" style={readerContentStyles}>
-              {storyInfoText && (
+              {showSummaries && storyInfoText && (
                 <div className="reader-summary motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
                   <div className="reader-summary-label">剧情概述</div>
                   <div className="reader-summary-body">{renderLines(storyInfoText)}</div>
