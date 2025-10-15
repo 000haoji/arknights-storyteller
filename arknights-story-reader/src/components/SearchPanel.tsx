@@ -322,7 +322,7 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
           <CustomScrollArea
           className="h-full"
           viewportClassName="reader-scroll"
-          trackOffsetTop="calc(3.5rem + 20px + env(safe-area-inset-top, 0px))"
+          trackOffsetTop="calc(3.5rem + 10px)"
           trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))"
         >
           <div className="container py-6 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">

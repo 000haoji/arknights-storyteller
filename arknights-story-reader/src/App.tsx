@@ -7,10 +7,12 @@ import { Settings } from "@/components/Settings";
 import { BottomNav } from "@/components/BottomNav";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
+import { ClueSetsProvider } from "@/hooks/useClueSets";
+import { ClueSetsPanel } from "@/components/ClueSetsPanel";
 import { KeepAlive } from "@/components/KeepAlive";
 import { CharactersPanel } from "@/components/CharactersPanel";
 
-type Tab = "stories" | "characters" | "search" | "settings";
+type Tab = "stories" | "characters" | "search" | "clues" | "settings";
 
 interface ReaderFocus {
   storyId: string;
@@ -25,6 +27,13 @@ function App() {
   const [readerStory, setReaderStory] = useState<StoryEntry | null>(null);
   const [readerFocus, setReaderFocus] = useState<ReaderFocus | null>(null);
   const [readerInitialCharacter, setReaderInitialCharacter] = useState<string | null>(null);
+  const [readerInitialJump, setReaderInitialJump] = useState<{
+    storyId: string;
+    segmentIndex: number;
+    digestHex?: string;
+    preview?: string;
+    issuedAt: number;
+  } | null>(null);
 
   const readerActive = readerVisible && readerStory !== null;
 
@@ -33,6 +42,7 @@ function App() {
     setReaderStory(story);
     setReaderFocus(null);
     setReaderInitialCharacter(null);
+    setReaderInitialJump(null);
     setReaderVisible(true);
   }, []);
 
@@ -52,6 +62,7 @@ function App() {
         issuedAt: Date.now(),
       });
       setReaderInitialCharacter(null);
+      setReaderInitialJump(null);
       setReaderVisible(true);
     },
     []
@@ -63,6 +74,19 @@ function App() {
       setReaderStory(story);
       setReaderFocus(null);
       setReaderInitialCharacter(character);
+      setReaderInitialJump(null);
+      setReaderVisible(true);
+    },
+    []
+  );
+
+  const handleOpenStoryJump = useCallback(
+    (story: StoryEntry, jump: { segmentIndex: number; digestHex?: string; preview?: string }) => {
+      setReaderStory(story);
+      setReaderFocus(null);
+      setReaderInitialCharacter(null);
+      setReaderInitialJump({ storyId: story.storyId, segmentIndex: jump.segmentIndex, digestHex: jump.digestHex, preview: jump.preview, issuedAt: Date.now() });
+      setActiveTab("stories");
       setReaderVisible(true);
     },
     []
@@ -87,6 +111,10 @@ function App() {
     [handleSearchResult]
   );
   const settingsView = useMemo(() => <Settings />, []);
+  const cluesView = useMemo(
+    () => <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} />,
+    [handleOpenStoryJump]
+  );
 
   const readerView = readerStory ? (
     <StoryReader
@@ -97,6 +125,9 @@ function App() {
       initialCharacter={readerInitialCharacter ?? undefined}
       initialFocus={
         readerFocus && readerFocus.storyId === readerStory.storyId ? readerFocus : null
+      }
+      initialJump={
+        readerInitialJump && readerInitialJump.storyId === readerStory.storyId ? readerInitialJump : null
       }
       onBack={handleBackToList}
     />
@@ -126,6 +157,9 @@ function App() {
         <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
           {searchView}
         </KeepAlive>
+        <KeepAlive active={!readerActive && activeTab === "clues"} className="absolute inset-0">
+          {cluesView}
+        </KeepAlive>
         <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
           {settingsView}
         </KeepAlive>
@@ -141,7 +175,11 @@ function App() {
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
-      <FavoritesProvider>{appContent}</FavoritesProvider>
+      <FavoritesProvider>
+        <ClueSetsProvider>
+          {appContent}
+        </ClueSetsProvider>
+      </FavoritesProvider>
     </ThemeProvider>
   );
 }

@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -1210,12 +1210,46 @@ impl DataService {
 
     /// 读取剧情简介
     pub fn read_story_info(&self, info_path: &str) -> Result<String, String> {
-        let full_path = self
+        let base_dir = self
             .data_dir
-            .join("zh_CN/gamedata/story")
-            .join(format!("{}.txt", info_path));
+            .join("zh_CN/gamedata/story");
 
-        fs::read_to_string(&full_path).map_err(|e| format!("Failed to read info file: {}", e))
+        let trimmed = info_path.trim();
+        if trimmed.is_empty() {
+            return Err("Failed to read info file: empty info path".to_string());
+        }
+
+        let normalized = trimmed
+            .trim_matches(|c| c == '/' || c == '\\')
+            .replace('\\', "/");
+
+        let mut candidates = Vec::new();
+        candidates.push(base_dir.join(format!("{}.txt", normalized)));
+
+        if normalized.starts_with("info/") {
+            let replaced = normalized.replacen("info/", "[uc]info/", 1);
+            candidates.push(base_dir.join(format!("{}.txt", replaced)));
+        }
+
+        for candidate in &candidates {
+            match fs::read_to_string(candidate) {
+                Ok(content) => return Ok(content),
+                Err(err) if err.kind() == ErrorKind::NotFound => continue,
+                Err(err) => {
+                    return Err(format!("Failed to read info file: {}", err));
+                }
+            }
+        }
+
+        Err(format!(
+            "Failed to read info file: {} (candidates: {})",
+            info_path,
+            candidates
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
     }
 
     /// 重建剧情全文索引
@@ -2055,5 +2089,35 @@ impl DataService {
 
         let stories = self.parse_stories_by_entry_type(&data, "NONE")?;
         Ok(stories)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn read_story_info_supports_uc_prefix() {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_root = std::env::temp_dir().join(format!("story_reader_test_{}", timestamp));
+        let data_dir = temp_root.join("ArknightsGameData");
+        let info_dir = data_dir.join("zh_CN/gamedata/story/[uc]info/demo");
+        fs::create_dir_all(&info_dir).unwrap();
+        fs::write(info_dir.join("sample.txt"), "test summary").unwrap();
+
+        let service = DataService {
+            data_dir: data_dir.clone(),
+            index_db_path: temp_root.join("story_index.db"),
+        };
+
+        let content = service
+            .read_story_info("info/demo/sample")
+            .expect("should read summary from [uc]info directory");
+        assert_eq!(content, "test summary");
+
+        let _ = fs::remove_dir_all(&temp_root);
     }
 }

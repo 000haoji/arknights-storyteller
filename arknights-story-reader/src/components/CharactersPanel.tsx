@@ -294,7 +294,7 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
 
       <CustomScrollArea
         className="flex-1"
-        trackOffsetTop="calc(3.25rem + 20px + env(safe-area-inset-top, 0px))"
+        trackOffsetTop="calc(3.25rem + 10px)"
       >
         <div className="p-4 space-y-4">
           {loading && (

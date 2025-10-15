@@ -1,5 +1,23 @@
 import { useState, useEffect } from "react";
 
+export const FONT_FAMILIES = [
+  {
+    value: "'Arknights Noto Serif SC', 'Noto Serif SC', 'Source Han Serif SC', serif",
+    label: "内置 · 思源宋体",
+  },
+  {
+    value: "'Arknights Noto Sans SC', 'Noto Sans SC', 'Source Han Sans SC', sans-serif",
+    label: "内置 · 思源黑体",
+  },
+  {
+    value: "'Arknights LXGW WenKai', 'LXGW WenKai', 'Noto Serif SC', serif",
+    label: "内置 · 霞鹜文楷",
+  },
+  { value: "system", label: "系统默认" },
+];
+
+const FONT_FAMILY_VALUES = new Set(FONT_FAMILIES.map((font) => font.value));
+
 export interface ReaderSettings {
   fontFamily: string;
   fontSize: number;
@@ -13,7 +31,7 @@ export interface ReaderSettings {
 }
 
 const DEFAULT_SETTINGS: ReaderSettings = {
-  fontFamily: "'Noto Serif SC', 'Source Han Serif SC', serif",
+  fontFamily: "'Arknights Noto Serif SC', 'Noto Serif SC', 'Source Han Serif SC', serif",
   fontSize: 18,
   lineHeight: 1.8,
   letterSpacing: 0,
@@ -31,7 +49,11 @@ export function useReaderSettings() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       try {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored) as Partial<ReaderSettings>;
+        const fontFamily = FONT_FAMILY_VALUES.has(parsed.fontFamily ?? "")
+          ? parsed.fontFamily
+          : DEFAULT_SETTINGS.fontFamily;
+        return { ...DEFAULT_SETTINGS, ...parsed, fontFamily };
       } catch {
         return DEFAULT_SETTINGS;
       }
@@ -53,17 +75,3 @@ export function useReaderSettings() {
 
   return { settings, updateSettings, resetSettings };
 }
-
-export const FONT_FAMILIES = [
-  { value: "'Noto Serif SC', 'Source Han Serif SC', serif", label: "思源宋体" },
-  { value: "'Noto Sans SC', 'Source Han Sans SC', sans-serif", label: "思源黑体" },
-  { value: "'LXGW WenKai', 'Noto Serif SC', serif", label: "霞鹜文楷" },
-  { value: "'ZCOOL XiaoWei', 'Noto Serif SC', serif", label: "站酷小薇" },
-  { value: "'Smiley Sans', 'Noto Sans SC', sans-serif", label: "得意黑" },
-  { value: "'Fira Sans', 'Source Sans Pro', 'Noto Sans', sans-serif", label: "Fira Sans" },
-  { value: "'Songti SC', 'STSong', serif", label: "宋体" },
-  { value: "'Heiti SC', 'STHeiti', sans-serif", label: "黑体" },
-  { value: "'Kaiti SC', 'STKaiti', serif", label: "楷体" },
-  { value: "'PingFang SC', -apple-system, sans-serif", label: "苹方" },
-  { value: "system", label: "系统默认" },
-];

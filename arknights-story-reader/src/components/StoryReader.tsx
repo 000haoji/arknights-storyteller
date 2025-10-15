@@ -20,16 +20,21 @@ import {
   Settings as SettingsIcon,
   Trash2,
   Star,
+  Plus,
+  Check,
 } from "lucide-react";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { ReaderSettingsPanel } from "@/components/ReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHighlights } from "@/hooks/useHighlights";
+import { useClueSets } from "@/hooks/useClueSets";
 import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import type { StoryEntry } from "@/types/story";
+import { fnv1a64, normalizeForDigest, digestToHex64 } from "@/lib/clueCodecs";
 
 interface ReaderSearchFocus {
   storyId: string;
@@ -45,6 +50,7 @@ interface StoryReaderProps {
   onBack: () => void;
   initialFocus?: ReaderSearchFocus | null;
   initialCharacter?: string;
+  initialJump?: { storyId: string; segmentIndex: number; digestHex?: string; preview?: string; issuedAt?: number } | null;
 }
 
 interface RenderableSegment {
@@ -68,7 +74,7 @@ function isSegmentHighlightable(segment: StorySegment): boolean {
   }
 }
 
-export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocus, initialCharacter }: StoryReaderProps) {
+export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocus, initialCharacter, initialJump }: StoryReaderProps) {
   const [content, setContent] = useState<ParsedStoryContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,17 +86,23 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const [bookmarkMode, setBookmarkMode] = useState(false);
   const [activeCharacter, setActiveCharacter] = useState<string | null>(null);
   const [storyEntry, setStoryEntry] = useState<StoryEntry | null>(null);
+  const [storyInfoText, setStoryInfoText] = useState<string | null>(null);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const readerRootRef = useRef<HTMLDivElement | null>(null);
   const focusAppliedRef = useRef<number | null>(null);
   const characterAppliedRef = useRef<string | null>(null);
   const pendingScrollIndexRef = useRef<number | null>(null);
+  const jumpAppliedRef = useRef<number | null>(null);
+  const [cluePickerOpen, setCluePickerOpen] = useState(false);
+  const [cluePickerIndex, setCluePickerIndex] = useState<number | null>(null);
+  const [cluePickerTitle, setCluePickerTitle] = useState<string>("");
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
   const { isFavorite, toggleFavorite } = useFavorites();
+  const { sets: clueSets, addItem, createSet } = useClueSets();
 
   const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
@@ -242,6 +254,29 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return "";
     }
   }, []);
+
+  const getSegmentPreview = useCallback((segment: StorySegment) => {
+    switch (segment.type) {
+      case "dialogue": {
+        const primary = segment.text.split("\n")[0] ?? "";
+        return `${segment.characterName}: ${primary}`.replace(/\s+/g, " ").trim();
+      }
+      case "narration":
+      case "system":
+      case "subtitle":
+      case "sticker":
+        return (segment.text.split("\n")[0] ?? "").replace(/\s+/g, " ").trim();
+      default:
+        return "";
+    }
+  }, []);
+
+  const getSegmentDigestHex = useCallback((segment: StorySegment) => {
+    const text = getSegmentSearchText(segment);
+    const normalized = normalizeForDigest(text);
+    const d = fnv1a64(normalized);
+    return digestToHex64(d);
+  }, [getSegmentSearchText]);
 
   const findFocusSegmentIndex = useCallback(
     (focus: ReaderSearchFocus): number | null => {
@@ -410,6 +445,35 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   }, [storyId]);
 
   useEffect(() => {
+    let cancelled = false;
+    setStoryInfoText(null);
+    const infoPath = storyEntry?.storyInfo?.trim();
+    if (!infoPath) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const raw = await api.getStoryInfo(infoPath);
+        if (cancelled) return;
+        const normalized = raw.replace(/\r\n/g, "\n").trim();
+        setStoryInfoText(normalized.length > 0 ? normalized : null);
+      } catch (err) {
+        console.warn("[StoryReader] Failed to load story summary:", err);
+        if (!cancelled) {
+          setStoryInfoText(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [storyEntry?.storyInfo]);
+
+  useEffect(() => {
     setHighlightSegmentIndex(null);
     focusAppliedRef.current = null;
     setActiveCharacter(null);
@@ -421,7 +485,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     // 若正在处理搜索跳转或初始定位，避免恢复旧的阅读进度，以免覆盖滚动
     const shouldSkipRestore =
       pendingScrollIndexRef.current !== null ||
-      (initialFocus && initialFocus.storyId === storyId);
+      (initialFocus && initialFocus.storyId === storyId) ||
+      (initialJump && initialJump.storyId === storyId);
     if (shouldSkipRestore) {
       return;
     }
@@ -447,7 +512,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       const ratio = denominator <= 0 ? 1 : storedTop / denominator;
       setProgressValue(Number.isFinite(ratio) ? ratio : 0);
     }
-  }, [processedSegments, settings.readingMode, progress, totalPages, initialFocus, storyId]);
+  }, [processedSegments, settings.readingMode, progress, totalPages, initialFocus, initialJump, storyId]);
 
   // 初始角色高亮与定位
   useEffect(() => {
@@ -561,6 +626,56 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     [processedSegments, scrollToSegment, settings.readingMode, totalPages]
   );
 
+  // 优先处理 share code 跳转（initialJump）
+  useEffect(() => {
+    if (!initialJump || !processedSegments.length) return;
+    const token = initialJump.issuedAt ?? Date.now();
+    if (jumpAppliedRef.current === token) return;
+
+    let target = initialJump.segmentIndex;
+    const hex = (initialJump.digestHex || "").toLowerCase();
+    const hasDigest = hex !== "" && !/^0+$/.test(hex);
+    if (hasDigest && target >= 0 && target < processedSegments.length) {
+      const seg = processedSegments[target];
+      const digest = getSegmentDigestHex(seg).toLowerCase();
+      if (digest !== hex) {
+        const want = hex;
+        const range = 12;
+        let found: number | null = null;
+        for (
+          let i = Math.max(0, target - range);
+          i <= Math.min(processedSegments.length - 1, target + range);
+          i++
+        ) {
+          const d = getSegmentDigestHex(processedSegments[i]).toLowerCase();
+          if (d === want) {
+            found = i;
+            break;
+          }
+        }
+        if (found !== null) target = found;
+      }
+    }
+
+    if ((!hasDigest || target < 0 || target >= processedSegments.length) && initialJump.preview) {
+      const idx = findFocusSegmentIndex({ storyId, query: "", snippet: initialJump.preview });
+      if (idx !== null) target = idx;
+    }
+
+    if (target >= 0 && target < processedSegments.length) {
+      setActiveCharacter(null);
+      jumpToSegment(target, { highlightSearch: true });
+    }
+    jumpAppliedRef.current = token;
+  }, [
+    initialJump,
+    processedSegments,
+    getSegmentDigestHex,
+    findFocusSegmentIndex,
+    jumpToSegment,
+    storyId,
+  ]);
+
   // 当页面或段落渲染完成后，执行挂起的滚动请求（最多尝试几次）
   useLayoutEffect(() => {
     if (pendingScrollIndexRef.current === null) return;
@@ -625,6 +740,23 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     },
     [activeCharacter, jumpToSegment]
   );
+
+  const handleAddHighlightToClueSet = useCallback((index: number) => {
+    setCluePickerIndex(index);
+    setCluePickerOpen(true);
+  }, []);
+
+  const confirmAddToSet = useCallback((setId: string) => {
+    if (cluePickerIndex === null) return;
+    const seg = processedSegments[cluePickerIndex];
+    if (!seg) return;
+    const preview = getSegmentPreview(seg);
+    const digestHex = getSegmentDigestHex(seg);
+    addItem(setId, { storyId, segmentIndex: cluePickerIndex, preview, digestHex });
+    setCluePickerOpen(false);
+    setCluePickerIndex(null);
+    setCluePickerTitle("");
+  }, [addItem, cluePickerIndex, getSegmentDigestHex, getSegmentPreview, processedSegments, storyId]);
 
   const clearCharacterHighlight = useCallback(() => {
     setActiveCharacter(null);
@@ -944,7 +1076,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
             settings.readingMode === "paged" && "reader-scroll--paged"
           )}
           viewportRef={scrollContainerRef}
-          trackOffsetTop="calc(4rem + 20px + env(safe-area-inset-top, 0px))"
+          trackOffsetTop="calc(4rem + 10px)"
           trackOffsetBottom={
             settings.readingMode === "paged"
               ? "5.5rem"
@@ -953,6 +1085,12 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         >
           <div className="container py-8 pb-24 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
             <div className="reader-content motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700" style={readerContentStyles}>
+              {storyInfoText && (
+                <div className="reader-summary motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-700">
+                  <div className="reader-summary-label">剧情概述</div>
+                  <div className="reader-summary-body">{renderLines(storyInfoText)}</div>
+                </div>
+              )}
               {renderableSegments.map((segment, idx) =>
                 renderSegment(segment, idx === renderableSegments.length - 1)
               )}
@@ -1053,6 +1191,19 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                               >
                                 {entry.label}
                               </button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))]"
+                                title="加入线索集"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  handleAddHighlightToClueSet(entry.index);
+                                }}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1159,6 +1310,53 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
               </Card>
             </div>
           </aside>
+        </>
+      )}
+
+      {cluePickerOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setCluePickerOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">加入线索集</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-2">选择现有线索集</div>
+                  <div className="max-h-48 overflow-auto border rounded">
+                    {Object.values(clueSets).length === 0 ? (
+                      <div className="p-3 text-xs text-[hsl(var(--color-muted-foreground))]">暂无线索集</div>
+                    ) : (
+                      Object.values(clueSets)
+                        .sort((a, b) => b.updatedAt - a.updatedAt)
+                        .map((s) => (
+                          <button key={s.id} className="w-full px-3 py-2 text-left hover:bg-[hsl(var(--color-accent))] border-b last:border-b-0" onClick={() => confirmAddToSet(s.id)}>
+                            <div className="text-sm">{s.title}</div>
+                            <div className="text-[10px] text-[hsl(var(--color-muted-foreground))]">{s.items.length} 条</div>
+                          </button>
+                        ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-2">或新建线索集</div>
+                  <div className="flex items-center gap-2">
+                    <Input placeholder="线索集名称" value={cluePickerTitle} onChange={(e) => setCluePickerTitle(e.target.value)} />
+                    <Button onClick={() => {
+                      const id = createSet(cluePickerTitle.trim() || "我的线索集");
+                      confirmAddToSet(id);
+                    }} disabled={!cluePickerTitle.trim()}>
+                      新建并加入
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={() => setCluePickerOpen(false)}>取消</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
 
