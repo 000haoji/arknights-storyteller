@@ -37,6 +37,7 @@ interface ClueSetsContextValue {
   addItems: (setId: string, items: Array<Omit<ClueItem, "createdAt"> & { createdAt?: number }>) => void;
   removeItem: (setId: string, storyId: string, segmentIndex: number) => void;
   moveItem: (setId: string, fromIndex: number, toIndex: number) => void;
+  setItems: (setId: string, items: ClueItem[]) => void; // replace items order
   exportShareCode: (setId: string) => Promise<string>;
   importShareCode: (code: string, opts?: { targetSetId?: string; createIfMissing?: boolean; titleIfCreate?: string }) => Promise<ImportResult>;
   updateItemMeta: (
@@ -45,9 +46,11 @@ interface ClueSetsContextValue {
     segmentIndex: number,
     meta: Partial<Pick<ClueItem, "preview" | "digestHex">>
   ) => void;
+  ensureDefaultSetId: () => string; // get default set id, create if missing
 }
 
 const STORAGE_KEY = "arknights-clue-sets-v1";
+const DEFAULT_SET_ID_KEY = "arknights-default-clue-set-id";
 
 const ClueSetsContext = createContext<ClueSetsContextValue | null>(null);
 
@@ -143,6 +146,27 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const ensureDefaultSetId = useCallback(() => {
+    try {
+      const cached = window.localStorage.getItem(DEFAULT_SET_ID_KEY);
+      if (cached && state.sets[cached]) {
+        return cached;
+      }
+    } catch {}
+    // choose an existing one named "我的线索集" if present
+    const existing = Object.values(state.sets).find((s) => s.title === "我的线索集");
+    if (existing) {
+      try { window.localStorage.setItem(DEFAULT_SET_ID_KEY, existing.id); } catch {}
+      return existing.id;
+    }
+    const id = (() => {
+      const created = createSet("我的线索集");
+      try { window.localStorage.setItem(DEFAULT_SET_ID_KEY, created); } catch {}
+      return created;
+    })();
+    return id;
+  }, [createSet, state.sets]);
+
   const addItem = useCallback(
     (setId: string, item: Omit<ClueItem, "createdAt"> & { createdAt?: number }) => {
       const createdAt = item.createdAt ?? Date.now();
@@ -199,6 +223,14 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
       const [m] = items.splice(fromIndex, 1);
       items.splice(toIndex, 0, m);
       return { sets: { ...prev.sets, [setId]: { ...set, items, updatedAt: Date.now() } } };
+    });
+  }, []);
+
+  const setItems = useCallback((setId: string, items: ClueItem[]) => {
+    setState((prev) => {
+      const set = prev.sets[setId];
+      if (!set) return prev;
+      return { sets: { ...prev.sets, [setId]: { ...set, items: [...items], updatedAt: Date.now() } } };
     });
   }, []);
 
@@ -276,10 +308,12 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
     addItems,
     removeItem,
     moveItem,
+    setItems,
     exportShareCode,
     importShareCode,
     updateItemMeta,
-  }), [state.sets, createSet, deleteSet, renameSet, addItem, addItems, removeItem, moveItem, exportShareCode, importShareCode, updateItemMeta]);
+    ensureDefaultSetId,
+  }), [state.sets, createSet, deleteSet, renameSet, addItem, addItems, removeItem, moveItem, setItems, exportShareCode, importShareCode, updateItemMeta, ensureDefaultSetId]);
 
   return <ClueSetsContext.Provider value={value}>{children}</ClueSetsContext.Provider>;
 }

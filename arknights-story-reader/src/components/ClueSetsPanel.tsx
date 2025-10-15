@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
-import { Share2, Trash2, Plus, Copy, ArrowRightLeft, Pencil, ArrowDown, BookmarkPlus } from "lucide-react";
+import { Share2, Trash2, Plus, Copy, Pencil, ArrowDown, BookOpen, ArrowUp } from "lucide-react";
 import { api } from "@/services/api";
 import type { StoryEntry } from "@/types/story";
 import { normalizeForDigest, fnv1a64, digestToHex64 } from "@/lib/clueCodecs";
@@ -12,10 +12,11 @@ import { Collapsible } from "@/components/ui/collapsible";
 
 interface ClueSetsPanelProps {
   onOpenStoryJump: (story: StoryEntry, jump: { segmentIndex: number; digestHex?: string; preview?: string }) => void;
+  onReadSet?: (setId: string) => void;
 }
 
-export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
-  const { sets, createSet, deleteSet, renameSet, removeItem, moveItem, exportShareCode, importShareCode, updateItemMeta, addItems } = useClueSets();
+export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps) {
+  const { sets, createSet, deleteSet, renameSet, removeItem, setItems, exportShareCode, importShareCode, updateItemMeta, addItems } = useClueSets();
   const [importCode, setImportCode] = useState("");
   const [busySetId, setBusySetId] = useState<string | null>(null);
   const [storyCache, setStoryCache] = useState<Record<string, StoryEntry | null>>({});
@@ -23,6 +24,9 @@ export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameSetId, setRenameSetId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState<string>("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSetId, setDeleteSetId] = useState<string | null>(null);
+  const [deleteTitle, setDeleteTitle] = useState<string>("");
 
   const allStoryIds = useMemo(() => {
     const ids = new Set<string>();
@@ -344,6 +348,20 @@ export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
       <main className="flex-1 overflow-hidden">
         <CustomScrollArea className="h-full" viewportClassName="reader-scroll" trackOffsetTop="calc(4rem + 20px)" trackOffsetBottom="calc(4.5rem + env(safe-area-inset-bottom, 0px))">
           <div className="container py-6 pb-24 space-y-4">
+            <Collapsible title="使用指南" defaultOpen={true}>
+              <div className="text-sm leading-relaxed space-y-2 px-1">
+                <p>线索集用于把多个剧情的关键段落（你在阅读器中“划线收藏”的段落）汇总在一起，便于复盘与分享。</p>
+                <p className="font-medium">推荐用法：</p>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>在“剧情”中打开某章，右上“书签”开启收藏模式；点击段落右侧书签完成“划线收藏”。</li>
+                  <li>在阅读器中对段落“划线收藏”，系统会自动加入默认线索集；无需额外操作。</li>
+                  <li>也可在此页为某个线索集点击“从划线导入”，一次性导入你当前设备的所有划线。</li>
+                  <li>完成后点击“分享码”复制 AKC1- 开头的分享码，发给他人；对方在此页“粘贴分享码导入”。</li>
+                  <li>点击条目的“前往”可一键跳回对应剧情段落（跨版本也能稳定位）。</li>
+                </ul>
+                <p className="text-xs text-[hsl(var(--color-muted-foreground))]">提示：已加入线索集的划线，会在阅读器“划线收藏”里显示对勾标记；重复导入会自动去重。</p>
+              </div>
+            </Collapsible>
             {sortedSets.length === 0 && (
               <div className="text-center text-[hsl(var(--color-muted-foreground))]">暂无线索集，先在阅读器中添加或点击上方新建</div>
             )}
@@ -354,23 +372,51 @@ export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
                 defaultOpen={idx === 0}
                 actions={
                   <>
-                    <Button variant="outline" size="sm" disabled={busySetId === set.id} onClick={() => handleImportFromHighlights(set.id)} title="从划线导入">
-                      <BookmarkPlus className="h-3.5 w-3.5 mr-1.5" /> 从划线导入
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      disabled={set.items.length === 0}
+                      onClick={() => onReadSet?.(set.id)}
+                      aria-label="阅读"
+                      title="阅读"
+                    >
+                      <BookOpen className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="sm" disabled={busySetId === set.id} onClick={() => handleExport(set.id)} title="复制分享码">
-                      <Copy className="h-3.5 w-3.5 mr-1.5" /> 分享码
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      disabled={busySetId === set.id}
+                      onClick={() => handleExport(set.id)}
+                      aria-label="复制分享码"
+                      title="复制分享码"
+                    >
+                      <Copy className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => {
-                      setRenameSetId(set.id);
-                      setRenameTitle(set.title);
-                      setRenameOpen(true);
-                    }}>
-                      <Pencil className="h-3.5 w-3.5 mr-1.5" /> 重命名
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        setRenameSetId(set.id);
+                        setRenameTitle(set.title);
+                        setRenameOpen(true);
+                      }}
+                      aria-label="重命名"
+                      title="重命名"
+                    >
+                      <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => {
-                      if (confirm("确定删除该线索集？")) deleteSet(set.id);
-                    }}>
-                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> 删除
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        setDeleteSetId(set.id);
+                        setDeleteTitle(set.title);
+                        setDeleteOpen(true);
+                      }}
+                      aria-label="删除"
+                      title="删除"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </>
                 }
@@ -382,33 +428,82 @@ export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
                   {set.items.length === 0 && (
                     <div className="text-xs text-[hsl(var(--color-muted-foreground))]">暂无条目</div>
                   )}
-                  <div className="divide-y">
-                    {set.items.map((it, indexInSet) => {
-                      const story = storyCache[it.storyId];
+
+                  {/* 以关卡为单位分组展示 */}
+                  {(() => {
+                    const annotated = set.items.map((it, idx) => ({ ...it, __index: idx }));
+                    const order: string[] = [];
+                    const groups = new Map<string, typeof annotated>();
+                    annotated.forEach((row) => {
+                      if (!groups.has(row.storyId)) {
+                        groups.set(row.storyId, [] as any);
+                        order.push(row.storyId);
+                      }
+                      groups.get(row.storyId)!.push(row);
+                    });
+
+                    return order.map((sid, groupIndex) => {
+                      // 组内严格按原文顺序（segmentIndex 升序）
+                      const group = [...(groups.get(sid)!)].sort((a, b) => (a.segmentIndex - b.segmentIndex));
+                      const story = storyCache[sid];
+                      const canGroupUp = groupIndex > 0;
+                      const canGroupDown = groupIndex < order.length - 1;
+
+                      const moveGroup = (direction: 'up' | 'down') => {
+                        const newOrder = [...order];
+                        const curr = groupIndex;
+                        const target = direction === 'up' ? curr - 1 : curr + 1;
+                        if (target < 0 || target >= newOrder.length) return;
+                        const tmp = newOrder[curr];
+                        newOrder[curr] = newOrder[target];
+                        newOrder[target] = tmp;
+                        // 重建 items 按新顺序
+                        const flat: typeof set.items = [] as any;
+                        newOrder.forEach((oid) => {
+                          const g = groups.get(oid)!;
+                          g.forEach((row) => flat.push({ storyId: row.storyId, segmentIndex: row.segmentIndex, preview: row.preview, digestHex: row.digestHex, createdAt: row.createdAt } as any));
+                        });
+                        setItems(set.id, flat as any);
+                      };
                       return (
-                        <div key={`${it.storyId}-${it.segmentIndex}-${indexInSet}`} className="py-3 flex items-center gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium truncate">{story ? story.storyName : it.storyId}</div>
-                            <div className="text-xs text-[hsl(var(--color-muted-foreground))] truncate">段落 #{it.segmentIndex}{it.preview ? ` · ${it.preview}` : ""}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => handleOpen(it.storyId, it.segmentIndex, it.digestHex, it.preview)}>
-                              前往
+                        <div key={`group-${sid}`} className="mb-4">
+                          <div className="text-sm font-semibold mb-2 flex items-center gap-2">
+                            <span>{story ? story.storyName : sid}</span>
+                            <span className="text-xs text-[hsl(var(--color-muted-foreground))]">{group.length} 条</span>
+                            <div className="flex-1" />
+                            <Button variant="outline" size="icon" disabled={!canGroupUp} onClick={() => moveGroup('up')} title="上移关卡" aria-label="上移关卡">
+                              <ArrowUp className="h-4 w-4" />
                             </Button>
-                            <Button variant="outline" size="icon" title="上移" disabled={indexInSet === 0} onClick={() => moveItem(set.id, indexInSet, indexInSet - 1)}>
-                              <ArrowRightLeft className="h-4 w-4 rotate-90" />
-                            </Button>
-                            <Button variant="outline" size="icon" title="下移" disabled={indexInSet >= set.items.length - 1} onClick={() => moveItem(set.id, indexInSet, indexInSet + 1)}>
+                            <Button variant="outline" size="icon" disabled={!canGroupDown} onClick={() => moveGroup('down')} title="下移关卡" aria-label="下移关卡">
                               <ArrowDown className="h-4 w-4" />
                             </Button>
-                            <Button variant="outline" size="icon" title="移除" onClick={() => removeItem(set.id, it.storyId, it.segmentIndex)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                          </div>
+                          <div className="divide-y">
+                            {group.map((row, pos) => {
+                              return (
+                                <div key={`${row.storyId}-${row.segmentIndex}-${(row as any).__index ?? pos}`} className="py-3 flex items-center gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs text-[hsl(var(--color-muted-foreground))] truncate">段落 #{row.segmentIndex}</div>
+                                    {row.preview && (
+                                      <div className="text-sm truncate">{row.preview}</div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="outline" size="sm" onClick={() => handleOpen(row.storyId, row.segmentIndex, row.digestHex, row.preview)}>
+                                      前往
+                                    </Button>
+                                    <Button variant="outline" size="icon" title="移除" onClick={() => removeItem(set.id, row.storyId, row.segmentIndex)}>
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    });
+                  })()}
                 </div>
               </Collapsible>
             ))}
@@ -437,6 +532,34 @@ export function ClueSetsPanel({ onOpenStoryJump }: ClueSetsPanelProps) {
                     setRenameSetId(null);
                     setRenameTitle("");
                   }}>保存</Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {deleteOpen && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setDeleteOpen(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">确认删除</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="text-sm">确定要删除线索集“{deleteTitle}”吗？此操作不可撤销。</div>
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setDeleteOpen(false)}>取消</Button>
+                  <Button onClick={() => {
+                    if (!deleteSetId) return;
+                    deleteSet(deleteSetId);
+                    setDeleteOpen(false);
+                    setDeleteSetId(null);
+                    setDeleteTitle("");
+                    setMessage("已删除线索集");
+                    setTimeout(() => setMessage(null), 1200);
+                  }}>删除</Button>
                 </div>
               </CardContent>
             </Card>

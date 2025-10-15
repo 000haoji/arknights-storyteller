@@ -97,12 +97,14 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   const [cluePickerOpen, setCluePickerOpen] = useState(false);
   const [cluePickerIndex, setCluePickerIndex] = useState<number | null>(null);
   const [cluePickerTitle, setCluePickerTitle] = useState<string>("");
+  const [cluePickerMode, setCluePickerMode] = useState<"single" | "bulk">("single");
+  const [cluePickerBulk, setCluePickerBulk] = useState<number[] | null>(null);
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { progress, updateProgress } = useReadingProgress(storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
   const { isFavorite, toggleFavorite } = useFavorites();
-  const { sets: clueSets, addItem, createSet } = useClueSets();
+  const { sets: clueSets, addItem, addItems, createSet, removeItem, ensureDefaultSetId } = useClueSets();
 
   const processedSegments = useMemo<StorySegment[]>(() => {
     if (!content) return [];
@@ -155,6 +157,11 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
 
     return merged;
   }, [content]);
+
+  // Ensure default clue set exists early to guarantee subsequent add operations
+  useEffect(() => {
+    try { ensureDefaultSetId(); } catch {}
+  }, [ensureDefaultSetId]);
 
   const highlightEntries = useMemo(
     () =>
@@ -277,6 +284,16 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     const d = fnv1a64(normalized);
     return digestToHex64(d);
   }, [getSegmentSearchText]);
+
+  const importedSegmentIndexSet = useMemo(() => {
+    const set = new Set<number>();
+    Object.values(clueSets).forEach((cs) => {
+      cs.items.forEach((it) => {
+        if (it.storyId === storyId) set.add(it.segmentIndex);
+      });
+    });
+    return set;
+  }, [clueSets, storyId]);
 
   const findFocusSegmentIndex = useCallback(
     (focus: ReaderSearchFocus): number | null => {
@@ -742,26 +759,58 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   );
 
   const handleAddHighlightToClueSet = useCallback((index: number) => {
-    setCluePickerIndex(index);
-    setCluePickerOpen(true);
+    // simplified flow: toggle highlight already auto-add, so this becomes no-op
+    setCluePickerOpen(false);
+  }, []);
+
+  const handleBulkAddHighlights = useCallback(() => {
+    // simplified: already auto-added on highlight; keep as no-op
+    setCluePickerOpen(false);
   }, []);
 
   const confirmAddToSet = useCallback((setId: string) => {
-    if (cluePickerIndex === null) return;
-    const seg = processedSegments[cluePickerIndex];
-    if (!seg) return;
-    const preview = getSegmentPreview(seg);
-    const digestHex = getSegmentDigestHex(seg);
-    addItem(setId, { storyId, segmentIndex: cluePickerIndex, preview, digestHex });
     setCluePickerOpen(false);
     setCluePickerIndex(null);
+    setCluePickerBulk(null);
     setCluePickerTitle("");
-  }, [addItem, cluePickerIndex, getSegmentDigestHex, getSegmentPreview, processedSegments, storyId]);
+  }, []);
+
+  // Auto-sync highlight <-> default clue set
+  const addSegmentToDefault = useCallback((index: number) => {
+    const seg = processedSegments[index];
+    if (!seg) return;
+    const setId = ensureDefaultSetId();
+    const preview = getSegmentPreview(seg);
+    const digestHex = getSegmentDigestHex(seg);
+    addItem(setId, { storyId, segmentIndex: index, preview, digestHex });
+  }, [addItem, ensureDefaultSetId, getSegmentDigestHex, getSegmentPreview, processedSegments, storyId]);
+
+  const removeSegmentFromDefault = useCallback((index: number) => {
+    const setId = ensureDefaultSetId();
+    removeItem(setId, storyId, index);
+  }, [ensureDefaultSetId, removeItem, storyId]);
+
+  const handleToggleHighlightUnified = useCallback((index: number) => {
+    const before = isHighlighted(index);
+    toggleHighlight(index);
+    if (!before) {
+      addSegmentToDefault(index);
+    } else {
+      removeSegmentFromDefault(index);
+    }
+  }, [addSegmentToDefault, isHighlighted, removeSegmentFromDefault, toggleHighlight]);
 
   const clearCharacterHighlight = useCallback(() => {
     setActiveCharacter(null);
     setHighlightSegmentIndex(null);
   }, []);
+
+  const handleClearHighlightsUnified = useCallback(() => {
+    const setId = ensureDefaultSetId();
+    // Remove all current highlights from default set
+    highlights.forEach((idx) => removeItem(setId, storyId, idx));
+    clearHighlights();
+  }, [clearHighlights, ensureDefaultSetId, highlights, removeItem, storyId]);
 
   const handleJumpToSegment = useCallback(
     (index: number) => {
@@ -794,7 +843,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            toggleHighlight(index);
+            handleToggleHighlightUnified(index);
           }}
           aria-label={highlighted ? "取消划线收藏" : "划线收藏"}
         >
@@ -1163,16 +1212,19 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                           <h3 className="text-sm font-semibold uppercase tracking-widest text-[hsl(var(--color-muted-foreground))]">
                             划线收藏
                           </h3>
-                          {highlightEntries.length > 0 && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-xs h-auto px-2 py-1 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-destructive))]"
-                              onClick={() => clearHighlights()}
-                            >
-                              清空
-                            </Button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {/* 简化：划线默认加入线索集，移除“全部加入” */}
+                            {highlightEntries.length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-xs h-auto px-2 py-1 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-destructive))]"
+                                onClick={handleClearHighlightsUnified}
+                              >
+                                清空
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div className="space-y-2">
                           {highlightEntries.length === 0 && (
@@ -1180,7 +1232,9 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                               暂无划线内容
                             </div>
                           )}
-                          {highlightEntries.map((entry) => (
+                          {highlightEntries.map((entry) => {
+                            const already = importedSegmentIndexSet.has(entry.index);
+                            return (
                             <div
                               key={entry.index}
                               className="flex items-start gap-3 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
@@ -1191,19 +1245,15 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                               >
                                 {entry.label}
                               </button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))]"
-                                title="加入线索集"
-                                onClick={(event) => {
-                                  event.preventDefault();
-                                  event.stopPropagation();
-                                  handleAddHighlightToClueSet(entry.index);
-                                }}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-[hsl(var(--color-primary))]"
+                            title="已加入线索集"
+                            disabled
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -1211,14 +1261,14 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                                 onClick={(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
-                                  toggleHighlight(entry.index);
+                                  handleToggleHighlightUnified(entry.index);
                                 }}
                                 aria-label="移除划线"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          ))}
+                          );})}
                         </div>
                       </section>
 

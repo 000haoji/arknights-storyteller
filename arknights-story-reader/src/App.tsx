@@ -9,6 +9,7 @@ import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { ClueSetsProvider } from "@/hooks/useClueSets";
 import { ClueSetsPanel } from "@/components/ClueSetsPanel";
+import { ClueSetReader } from "@/components/ClueSetReader";
 import { KeepAlive } from "@/components/KeepAlive";
 import { CharactersPanel } from "@/components/CharactersPanel";
 
@@ -34,6 +35,7 @@ function App() {
     preview?: string;
     issuedAt: number;
   } | null>(null);
+  const [clueReaderSetId, setClueReaderSetId] = useState<string | null>(null);
 
   const readerActive = readerVisible && readerStory !== null;
 
@@ -102,6 +104,10 @@ function App() {
     [readerActive]
   );
 
+  const handleReadClueSet = useCallback((setId: string) => {
+    setClueReaderSetId(setId);
+  }, []);
+
   const storyListView = useMemo(
     () => <StoryList onSelectStory={handleSelectStory} />,
     [handleSelectStory]
@@ -112,8 +118,8 @@ function App() {
   );
   const settingsView = useMemo(() => <Settings />, []);
   const cluesView = useMemo(
-    () => <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} />,
-    [handleOpenStoryJump]
+    () => <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} onReadSet={handleReadClueSet} />,
+    [handleOpenStoryJump, handleReadClueSet]
   );
 
   const readerView = readerStory ? (
@@ -157,7 +163,7 @@ function App() {
         <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
           {searchView}
         </KeepAlive>
-        <KeepAlive active={!readerActive && activeTab === "clues"} className="absolute inset-0">
+        <KeepAlive active={!readerActive && activeTab === "clues" && !clueReaderSetId} className="absolute inset-0">
           {cluesView}
         </KeepAlive>
         <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
@@ -168,8 +174,21 @@ function App() {
             {readerView}
           </KeepAlive>
         )}
+        {clueReaderSetId && (
+          <KeepAlive active={Boolean(clueReaderSetId)} className="absolute inset-0">
+            <ClueSetReader
+              key={clueReaderSetId}
+              setId={clueReaderSetId}
+              onClose={() => setClueReaderSetId(null)}
+              onOpenStoryJump={(story, jump) => {
+                setClueReaderSetId(null);
+                handleOpenStoryJump(story, jump);
+              }}
+            />
+          </KeepAlive>
+        )}
       </div>
-      {!readerActive && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}
+      {!readerActive && !clueReaderSetId && <BottomNav activeTab={activeTab} onTabChange={handleTabChange} />}
     </div>
   );
 

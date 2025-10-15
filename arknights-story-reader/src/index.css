@@ -4,7 +4,7 @@
 
 @font-face {
   font-family: "Arknights Noto Sans SC";
-  src: url("/fonts/NotoSansSC-Regular.otf") format("opentype");
+  src: url("/fonts/NotoSansSC-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -12,7 +12,7 @@
 
 @font-face {
   font-family: "Arknights Noto Serif SC";
-  src: url("/fonts/NotoSerifSC-Regular.otf") format("opentype");
+  src: url("/fonts/NotoSerifSC-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -20,7 +20,7 @@
 
 @font-face {
   font-family: "Arknights LXGW WenKai";
-  src: url("/fonts/LXGWWenKai-Regular.ttf") format("truetype");
+  src: url("/fonts/LXGWWenKai-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
