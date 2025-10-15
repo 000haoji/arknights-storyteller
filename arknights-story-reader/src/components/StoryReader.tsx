@@ -283,16 +283,6 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     return digestToHex64(d);
   }, [getSegmentSearchText]);
 
-  const importedSegmentIndexSet = useMemo(() => {
-    const set = new Set<number>();
-    Object.values(clueSets).forEach((cs) => {
-      cs.items.forEach((it) => {
-        if (it.storyId === storyId) set.add(it.segmentIndex);
-      });
-    });
-    return set;
-  }, [clueSets, storyId]);
-
   const findFocusSegmentIndex = useCallback(
     (focus: ReaderSearchFocus): number | null => {
       const normalizedQuery = focus.query.trim().toLowerCase();
@@ -1218,9 +1208,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                               暂无划线内容
                             </div>
                           )}
-                          {highlightEntries.map((entry) => {
-                            const already = importedSegmentIndexSet.has(entry.index);
-                            return (
+                          {highlightEntries.map((entry) => (
                             <div
                               key={entry.index}
                               className="flex items-start gap-3 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 shadow-sm"
@@ -1254,7 +1242,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
-                          );})}
+                          ))}
                         </div>
                       </section>
 

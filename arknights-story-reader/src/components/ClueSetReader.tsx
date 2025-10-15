@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/services/api";
 import type { StoryEntry, ParsedStoryContent, StorySegment, Chapter, StoryCategory } from "@/types/story";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
@@ -358,38 +358,60 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
                           {!it.segment ? (
                             <div className="text-xs text-[hsl(var(--color-muted-foreground))] mb-4">未能定位该段，建议打开原文查看</div>
                           ) : (
-                            <div className={cn(
-                              'mb-4',
-                              it.segment.type === 'dialogue' && 'reader-paragraph reader-dialogue reader-segment',
-                              it.segment.type === 'narration' && 'reader-narration reader-segment',
-                              it.segment.type === 'system' && 'reader-system reader-segment',
-                              it.segment.type === 'subtitle' && 'reader-subtitle reader-segment',
-                              it.segment.type === 'sticker' && 'reader-sticker reader-segment'
-                            )}>
-                              {it.segment.type === 'dialogue' && (
-                                <>
-                                  <div className="reader-character-name">{it.segment.characterName}</div>
-                                  <div className="reader-text">{it.segment.text.split('\n').map((line: string, i: number) => (<span key={i}>{line}{i < it.segment.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
-                                </>
-                              )}
-                              {(it.segment.type === 'narration' || it.segment.type === 'system' || it.segment.type === 'subtitle' || it.segment.type === 'sticker') && (
-                                <div className="reader-text">{it.segment.text.split('\n').map((line: string, i: number) => (<span key={i}>{line}{i < it.segment.text.split('\n').length - 1 ? <br/> : null}</span>))}</div>
-                              )}
-                              {it.segment.type === 'decision' && (
-                                <div className="reader-decision">
-                                  <div className="reader-decision-title">选择：</div>
-                                  {it.segment.options.map((option, optionIndex) => (
-                                    <div key={optionIndex} className="reader-decision-option">
-                                      <span className="reader-decision-bullet">{optionIndex + 1}</span>
-                                      <span>{option}</span>
+                            (() => {
+                              const segment = it.segment;
+                              if (!segment) return null;
+
+                              const renderTextLines = (text: string) =>
+                                text.split("\n").map((line, idx, arr) => (
+                                  <span key={idx}>
+                                    {line}
+                                    {idx < arr.length - 1 ? <br /> : null}
+                                  </span>
+                                ));
+
+                              return (
+                                <div
+                                  className={cn(
+                                    "mb-4",
+                                    segment.type === "dialogue" && "reader-paragraph reader-dialogue reader-segment",
+                                    segment.type === "narration" && "reader-narration reader-segment",
+                                    segment.type === "system" && "reader-system reader-segment",
+                                    segment.type === "subtitle" && "reader-subtitle reader-segment",
+                                    segment.type === "sticker" && "reader-sticker reader-segment",
+                                    segment.type === "decision" && "reader-decision reader-segment",
+                                    segment.type === "header" && "reader-header"
+                                  )}
+                                >
+                                  {segment.type === "dialogue" ? (
+                                    <>
+                                      <div className="reader-character-name">{segment.characterName}</div>
+                                      <div className="reader-text">{renderTextLines(segment.text)}</div>
+                                    </>
+                                  ) : null}
+
+                                  {(segment.type === "narration" || segment.type === "system" || segment.type === "subtitle" || segment.type === "sticker") ? (
+                                    <div className="reader-text">{renderTextLines(segment.text)}</div>
+                                  ) : null}
+
+                                  {segment.type === "decision" ? (
+                                    <div className="reader-decision">
+                                      <div className="reader-decision-title">选择：</div>
+                                      {segment.options.map((option, optionIndex) => (
+                                        <div key={optionIndex} className="reader-decision-option">
+                                          <span className="reader-decision-bullet">{optionIndex + 1}</span>
+                                          <span>{option}</span>
+                                        </div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  ) : null}
+
+                                  {segment.type === "header" ? (
+                                    <div className="reader-header">{segment.title}</div>
+                                  ) : null}
                                 </div>
-                              )}
-                              {it.segment.type === 'header' && (
-                                <div className="reader-header">{it.segment.title}</div>
-                              )}
-                            </div>
+                              );
+                            })()
                           )}
                           {it.story && (
                             <div className="-mt-2 mb-6 text-right">

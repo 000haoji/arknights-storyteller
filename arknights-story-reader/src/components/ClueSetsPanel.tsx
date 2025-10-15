@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useClueSets } from "@/hooks/useClueSets";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +16,7 @@ interface ClueSetsPanelProps {
 }
 
 export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps) {
-  const { sets, createSet, deleteSet, renameSet, removeItem, setItems, exportShareCode, importShareCode, updateItemMeta, addItems } = useClueSets();
+  const { sets, createSet, deleteSet, renameSet, removeItem, setItems, exportShareCode, importShareCode, updateItemMeta } = useClueSets();
   const [importCode, setImportCode] = useState("");
   const [busySetId, setBusySetId] = useState<string | null>(null);
   const [storyCache, setStoryCache] = useState<Record<string, StoryEntry | null>>({});
