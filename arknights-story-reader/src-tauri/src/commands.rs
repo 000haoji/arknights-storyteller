@@ -256,6 +256,7 @@ pub async fn android_update_method2_http_download(
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;
+    use tauri::Manager;
 
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
@@ -294,7 +295,7 @@ pub async fn android_update_method2_http_download(
 }
 
 #[cfg(target_os = "android")]
-fn install_apk_via_intent(app: AppHandle, apk_path: PathBuf) -> Result<AndroidInstallResponse, String> {
+fn install_apk_via_intent(app: AppHandle, apk_path: std::path::PathBuf) -> Result<AndroidInstallResponse, String> {
     use tauri::Manager;
     
     #[derive(Serialize)]
@@ -328,6 +329,7 @@ fn install_apk_via_intent(app: AppHandle, apk_path: PathBuf) -> Result<AndroidIn
 pub async fn android_update_method3_frontend_download(
     app: AppHandle,
 ) -> Result<String, String> {
+    use tauri::Manager;
     let cache_dir = app
         .path()
         .app_cache_dir()

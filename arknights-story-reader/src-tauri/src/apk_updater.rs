@@ -84,7 +84,7 @@ impl<R: Runtime> AndroidUpdater<R> {
         Ok(Self(handle))
     }
 
-    fn download_and_install(
+    pub fn download_and_install(
         &self,
         url: String,
         file_name: Option<String>,
@@ -98,7 +98,7 @@ impl<R: Runtime> AndroidUpdater<R> {
             .map_err(|err| err.to_string())
     }
 
-    fn open_install_permission_settings(&self) -> PluginResult<()> {
+    pub fn open_install_permission_settings(&self) -> PluginResult<()> {
         self.0
             .run_mobile_plugin::<()>("openInstallPermissionSettings", ())
             .map_err(|err| err.to_string())
