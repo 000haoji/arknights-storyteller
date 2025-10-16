@@ -823,8 +823,13 @@ class ApkUpdaterPlugin(private val activity: Activity) : Plugin(activity) {
 
 **坑点：**
 - ❌ Tauri 2.8+ 的 Plugin 基类不再有 `onDestroy()` 方法
-- ✅ 直接删除 `override fun onDestroy()` 即可
-- ✅ CoroutineScope 不手动取消也不会造成严重问题
+- ❌ 如果代码中有 `override fun onDestroy()`，会导致 Kotlin 编译失败：
+  ```
+  'onDestroy' overrides nothing
+  Unresolved reference: onDestroy
+  ```
+- ✅ 直接删除整个 `override fun onDestroy() { ... }` 方法即可
+- ✅ CoroutineScope 不手动取消也不会造成严重问题（Activity 销毁时系统自动回收）
 
 ### 5. ACL 权限配置
 
@@ -895,13 +900,34 @@ class ApkUpdaterPlugin(private val activity: Activity) : Plugin(activity) {
   run: bash scripts/build-apk.sh
 ```
 
-**构建脚本配合：**
+**构建脚本配合：** `scripts/build-apk.sh`
 ```bash
-# 导出环境变量给 Tauri
+# 支持跳过前端构建
+if [ -z "$SKIP_WEB_BUILD" ]; then
+  info "Building web assets..."
+  npm run build
+else
+  info "Skipping web build (SKIP_WEB_BUILD is set)"
+fi
+
+# 导出环境变量给 Tauri 的 beforeBuildCommand
 if [ -n "$VITE_ANDROID_UPDATE_FEED" ]; then
+  info "Android update feed: $VITE_ANDROID_UPDATE_FEED"
   export VITE_ANDROID_UPDATE_FEED
 fi
+
+if [ -n "$VITE_ANDROID_ANNOUNCEMENTS_URL" ]; then
+  export VITE_ANDROID_ANNOUNCEMENTS_URL
+fi
+
+# 只构建 arm64-v8a 架构
+npm exec -- tauri android build --target aarch64 "$@"
 ```
+
+**关键点：**
+- `SKIP_WEB_BUILD=1` 时跳过脚本内的前端构建
+- 环境变量必须 `export`，否则 Tauri 子进程无法访问
+- `--target aarch64` 只构建 arm64，节省 75% 构建时间
 
 ### 2. 更新源 CORS/重定向问题
 
@@ -1102,38 +1128,70 @@ base64 -i upload-keystore.jks | pbcopy
 
 ### 依赖文件
 
-#### 1. `package.json`
+#### 1. `package.json`（位于 `arknights-story-reader/` 子目录）
 
 ```json
 {
-  "name": "your-app",
-  "version": "1.10.26",
+  "name": "story-teller",
+  "private": true,
+  "version": "1.10.28",
+  "type": "module",
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-process": "^2"
+    "@tauri-apps/plugin-process": "^2",
+    "@tauri-apps/plugin-updater": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4"
   }
 }
 ```
 
-#### 2. `src-tauri/Cargo.toml`
+#### 2. `src-tauri/Cargo.toml`（位于 `arknights-story-reader/src-tauri/`）
 
 ```toml
 [package]
-version = "1.10.26"
+name = "story-teller"
+version = "1.10.28"
+
+[lib]
+name = "story_teller_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[patch.crates-io]
+tauri-plugin = { path = "patches/tauri-plugin" }
 
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+regex = "1"
+walkdir = "2"
+lazy_static = "1.4"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+zip = { version = "0.6.6", default-features = false, features = ["deflate"] }
+rusqlite = { version = "0.30", features = ["bundled", "vtab"] }
+unicode-normalization = "0.1"
 chrono = "0.4"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 ```
+
+**重要说明：**
+- `chrono = "0.4"` 是必需的，用于生成时间戳文件名
+- `reqwest` 的 `blocking` feature 是必需的（Method 2 使用）
+- 桌面端插件使用条件编译，Android 端不包含
 
 #### 3. `src-tauri/tauri.conf.json`
 
@@ -1158,7 +1216,13 @@ tauri-plugin-process = "2"
 }
 ```
 
-⚠️ **不要添加 `app.capabilities` 或 `app.security.capabilities` 字段，会导致构建失败**
+⚠️ **关于 capabilities 配置的重要说明：**
+- ❌ **不要在 `app.capabilities` 添加配置** - 该字段不被 Tauri 2.x schema 支持，会导致配置解析失败
+- ⚠️ **`app.security.capabilities` 字段存在但不稳定** - 在某些 Tauri 版本会导致 `tauri::generate_context!()` panic：
+  ```
+  called `Result::unwrap()` on an `Err` value: capability with identifier capabilities/default not found
+  ```
+- ✅ **推荐方案：删除所有显式配置，依赖自动发现** - Tauri 会自动扫描 `src-tauri/capabilities/` 目录并加载 JSON 文件
 
 #### 4. `android-announcements.json`（项目根目录）
 
@@ -1460,7 +1524,14 @@ fi
 
 ## 总结
 
-经过 50+ 次迭代和调试，最终实现了一套稳定可靠的 Tauri Android 自动更新系统：
+经过 **70+ 次提交迭代**和无数次调试（包括自动版本递增的 chore 提交），最终实现了一套稳定可靠的 Tauri Android 自动更新系统：
+
+**统计数据：**
+- 总提交数：120+
+- 与更新相关的提交：71 次
+- 修复性提交（fix/refactor）：45+ 次
+- 版本递增提交（chore: bump version）：25+ 次
+- 实际调试迭代：约 50 轮
 
 ### 核心优势
 
