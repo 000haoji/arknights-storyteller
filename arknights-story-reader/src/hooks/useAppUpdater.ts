@@ -266,16 +266,8 @@ export async function installAndroidUpdate(update: AndroidUpdateAvailable): Prom
     {
       name: "Method 3: Frontend Fetch",
       fn: async () => {
-        const cacheDir = await invoke<string>("android_update_method3_frontend_download");
-        const fileName = update.manifest.fileName || `update-${Date.now()}.apk`;
-        const response = await fetch(update.manifest.url, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const blob = await response.blob();
-        const buffer = await blob.arrayBuffer();
-        const uint8 = new Uint8Array(buffer);
-        const path = `${cacheDir}/${fileName}`;
-        // Would need fs plugin to write, skip for now
-        throw new Error("Frontend download needs fs plugin");
+        // Would need fs plugin to write files, skip for now
+        throw new Error("Frontend download needs fs plugin (not implemented)");
       },
     },
     {
