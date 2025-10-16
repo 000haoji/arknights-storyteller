@@ -130,9 +130,4 @@ class ApkUpdaterPlugin(private val activity: Activity) : Plugin(activity) {
       activity.runOnUiThread(block)
     }
   }
-
-  override fun onDestroy() {
-    super.onDestroy()
-    scope.cancel()
-  }
 }

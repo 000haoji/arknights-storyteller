@@ -59,6 +59,7 @@ info "Building web assets..."
 npm run build
 
 info "Building Android APK via Tauri (release profile)..."
+info "Target architecture: arm64-v8a only"
 
 # Clean up stale tauri plugin cache directories to avoid "File exists" conflicts
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
@@ -68,7 +69,7 @@ if [ -d "$TAURI_CACHE_ROOT" ]; then
   find "$TAURI_CACHE_ROOT" -maxdepth 2 -type d \( -name 'tauri-plugin-fs-*' -o -name 'tauri-plugin-opener-*' \) -prune -exec rm -rf {} + 2>/dev/null || true
 fi
 
-npm exec -- tauri android build "$@"
+npm exec -- tauri android build --target aarch64 "$@"
 
 # Signing section -----------------------------------------------------------
 
