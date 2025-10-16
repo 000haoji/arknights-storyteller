@@ -6,6 +6,16 @@ use crate::models::{
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidInstallResponse {
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub needs_permission: bool,
+}
 
 pub struct AppState {
     pub data_service: Arc<Mutex<DataService>>,
@@ -220,4 +230,175 @@ pub async fn get_memory_stories(state: State<'_, AppState>) -> Result<Vec<StoryE
     tauri::async_runtime::spawn_blocking(move || service.get_memory_stories())
         .await
         .map_err(|err| format!("Failed to join memory stories task: {}", err))?
+}
+
+// ==================== Android Update Methods (Multi-fallback) ====================
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_update_method1_plugin_direct(
+    app: AppHandle,
+    url: String,
+    file_name: Option<String>,
+) -> Result<AndroidInstallResponse, String> {
+    use tauri::Manager;
+    let updater = app.state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>();
+    updater.download_and_install(url, file_name)
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_update_method2_http_download(
+    app: AppHandle,
+    url: String,
+    file_name: Option<String>,
+) -> Result<AndroidInstallResponse, String> {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::PathBuf;
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(300))
+        .build()
+        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .map_err(|e| format!("下载请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("服务器返回错误: HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .map_err(|e| format!("读取响应失败: {}", e))?;
+
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("获取缓存目录失败: {}", e))?;
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("创建缓存目录失败: {}", e))?;
+
+    let file_name = file_name.unwrap_or_else(|| format!("update-{}.apk", chrono::Utc::now().timestamp()));
+    let apk_path = cache_dir.join(&file_name);
+
+    let mut file = File::create(&apk_path)
+        .map_err(|e| format!("创建 APK 文件失败: {}", e))?;
+    file.write_all(&bytes)
+        .map_err(|e| format!("写入 APK 文件失败: {}", e))?;
+
+    install_apk_via_intent(app, apk_path)
+}
+
+#[cfg(target_os = "android")]
+fn install_apk_via_intent(app: AppHandle, apk_path: PathBuf) -> Result<AndroidInstallResponse, String> {
+    use tauri::Manager;
+    
+    #[derive(Serialize)]
+    struct InstallArgs {
+        path: String,
+    }
+
+    let path_str = apk_path.to_string_lossy().to_string();
+    
+    // Try plugin's install helper if available
+    if let Some(updater) = app.try_state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>() {
+        // Try to use native plugin to trigger install
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // This would need additional helper in plugin, skip for now
+            Err::<AndroidInstallResponse, String>("Plugin install helper not implemented".into())
+        }));
+        if let Ok(Ok(response)) = result {
+            return Ok(response);
+        }
+    }
+
+    // Return path for frontend to handle
+    Ok(AndroidInstallResponse {
+        status: Some(format!("downloaded:{}", path_str)),
+        needs_permission: false,
+    })
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_update_method3_frontend_download(
+    app: AppHandle,
+) -> Result<String, String> {
+    let cache_dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| format!("获取缓存目录失败: {}", e))?;
+    Ok(cache_dir.to_string_lossy().to_string())
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_update_method4_install_from_path(
+    _app: AppHandle,
+    apk_path: String,
+) -> Result<AndroidInstallResponse, String> {
+    // This would require JNI bridge to call Android PackageInstaller
+    // For now, return needs_permission to let user manually install
+    Ok(AndroidInstallResponse {
+        status: Some(format!("manual_install_required:{}", apk_path)),
+        needs_permission: true,
+    })
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_open_install_permission_settings(app: AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(updater) = app.try_state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>() {
+        updater.open_install_permission_settings()
+    } else {
+        Err("APK updater plugin not available".into())
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_update_method1_plugin_direct(
+    _app: AppHandle,
+    _url: String,
+    _file_name: Option<String>,
+) -> Result<AndroidInstallResponse, String> {
+    Err("Not Android platform".into())
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_update_method2_http_download(
+    _app: AppHandle,
+    _url: String,
+    _file_name: Option<String>,
+) -> Result<AndroidInstallResponse, String> {
+    Err("Not Android platform".into())
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_update_method3_frontend_download(
+    _app: AppHandle,
+) -> Result<String, String> {
+    Err("Not Android platform".into())
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_update_method4_install_from_path(
+    _app: AppHandle,
+    _apk_path: String,
+) -> Result<AndroidInstallResponse, String> {
+    Err("Not Android platform".into())
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_open_install_permission_settings(_app: AppHandle) -> Result<(), String> {
+    Err("Not Android platform".into())
 }

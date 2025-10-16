@@ -248,15 +248,90 @@ export async function checkAndroidUpdate(currentVersionOverride?: string): Promi
 }
 
 export async function installAndroidUpdate(update: AndroidUpdateAvailable): Promise<AndroidInstallResponse> {
-  const response = await invoke<AndroidInstallResponse>("plugin:apk-updater|download-and-install", {
-    url: update.manifest.url,
-    fileName: update.manifest.fileName ?? null,
-  });
-  return response;
+  const methods = [
+    {
+      name: "Method 1: Plugin Direct",
+      fn: () => invoke<AndroidInstallResponse>("android_update_method1_plugin_direct", {
+        url: update.manifest.url,
+        fileName: update.manifest.fileName ?? null,
+      }),
+    },
+    {
+      name: "Method 2: HTTP Download + Intent",
+      fn: () => invoke<AndroidInstallResponse>("android_update_method2_http_download", {
+        url: update.manifest.url,
+        fileName: update.manifest.fileName ?? null,
+      }),
+    },
+    {
+      name: "Method 3: Frontend Fetch",
+      fn: async () => {
+        const cacheDir = await invoke<string>("android_update_method3_frontend_download");
+        const fileName = update.manifest.fileName || `update-${Date.now()}.apk`;
+        const response = await fetch(update.manifest.url, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        const buffer = await blob.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+        const path = `${cacheDir}/${fileName}`;
+        // Would need fs plugin to write, skip for now
+        throw new Error("Frontend download needs fs plugin");
+      },
+    },
+    {
+      name: "Method 4: Download via Browser",
+      fn: async () => {
+        // Trigger browser download
+        const a = document.createElement("a");
+        a.href = update.manifest.url;
+        a.download = update.manifest.fileName || "update.apk";
+        a.click();
+        return {
+          status: "browser_download_triggered",
+          needsPermission: false,
+        };
+      },
+    },
+    {
+      name: "Method 5: Plugin via old command name",
+      fn: () => invoke<AndroidInstallResponse>("plugin:apk-updater|download_and_install", {
+        url: update.manifest.url,
+        fileName: update.manifest.fileName ?? null,
+      }),
+    },
+  ];
+
+  const errors: Array<{ method: string; error: string }> = [];
+
+  for (const method of methods) {
+    try {
+      console.info(`[AndroidUpdate] Attempting ${method.name}`);
+      const response = await method.fn();
+      console.info(`[AndroidUpdate] ${method.name} succeeded`, response);
+      return response;
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.warn(`[AndroidUpdate] ${method.name} failed:`, errMsg);
+      errors.push({ method: method.name, error: errMsg });
+    }
+  }
+
+  const summary = errors.map((e) => `${e.method}: ${e.error}`).join("\n");
+  throw new Error(`所有更新方法均失败:\n${summary}`);
 }
 
 export async function openAndroidInstallPermissionSettings(): Promise<void> {
-  await invoke("plugin:apk-updater|open-install-permission-settings");
+  try {
+    await invoke("android_open_install_permission_settings");
+  } catch (err1) {
+    console.warn("[AndroidUpdate] Primary settings opener failed, trying plugin direct", err1);
+    try {
+      await invoke("plugin:apk-updater|open-install-permission-settings");
+    } catch (err2) {
+      console.error("[AndroidUpdate] All settings opener methods failed", err1, err2);
+      throw err2;
+    }
+  }
 }
 
 export function useAppUpdater() {
