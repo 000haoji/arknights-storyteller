@@ -8,6 +8,9 @@ import type {
   StoryEntry,
   StoryIndexStatus,
   SearchDebugResponse,
+  CharacterBasicInfo,
+  CharacterHandbook,
+  CharacterVoice,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -194,5 +197,23 @@ export const api = {
   getRuneStories: async (): Promise<StoryEntry[]> => {
     console.log("[API] 调用 get_rune_stories");
     return invoke("get_rune_stories");
+  },
+
+  // 获取干员列表
+  getCharactersList: async (): Promise<CharacterBasicInfo[]> => {
+    console.log("[API] 调用 get_characters_list");
+    return invoke("get_characters_list");
+  },
+
+  // 获取干员档案
+  getCharacterHandbook: async (charId: string): Promise<CharacterHandbook> => {
+    console.log("[API] 调用 get_character_handbook, charId:", charId);
+    return invoke("get_character_handbook", { charId });
+  },
+
+  // 获取干员语音
+  getCharacterVoices: async (charId: string): Promise<CharacterVoice> => {
+    console.log("[API] 调用 get_character_voices, charId:", charId);
+    return invoke("get_character_voices", { charId });
   },
 };

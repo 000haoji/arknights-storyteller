@@ -165,3 +165,87 @@ pub struct StoryIndexStatus {
     #[serde(rename = "lastBuiltAt")]
     pub last_built_at: Option<i64>,
 }
+
+// ==================== 干员相关数据结构 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterHandbook {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "rarity")]
+    pub rarity: i32,
+    #[serde(rename = "profession")]
+    pub profession: String,
+    #[serde(rename = "subProfession")]
+    pub sub_profession: Option<String>,
+    #[serde(rename = "storyTextAudio")]
+    pub story_sections: Vec<HandbookStorySection>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandbookStorySection {
+    #[serde(rename = "storyTitle")]
+    pub story_title: String,
+    #[serde(rename = "stories")]
+    pub stories: Vec<HandbookStory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HandbookStory {
+    #[serde(rename = "storyText")]
+    pub story_text: String,
+    #[serde(rename = "unLockType")]
+    pub unlock_type: String,
+    #[serde(rename = "unLockParam")]
+    pub unlock_param: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterVoice {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "voices")]
+    pub voices: Vec<VoiceLine>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceLine {
+    #[serde(rename = "voiceId")]
+    pub voice_id: String,
+    #[serde(rename = "voiceTitle")]
+    pub voice_title: String,
+    #[serde(rename = "voiceText")]
+    pub voice_text: String,
+    #[serde(rename = "voiceIndex")]
+    pub voice_index: i32,
+    #[serde(rename = "unlockType")]
+    pub unlock_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterBasicInfo {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "appellation")]
+    pub appellation: String,
+    #[serde(rename = "rarity")]
+    pub rarity: i32,
+    #[serde(rename = "profession")]
+    pub profession: String,
+    #[serde(rename = "subProfessionId")]
+    pub sub_profession_id: String,
+    #[serde(rename = "position")]
+    pub position: String,
+    #[serde(rename = "nationId")]
+    pub nation_id: Option<String>,
+    #[serde(rename = "groupId")]
+    pub group_id: Option<String>,
+    #[serde(rename = "teamId")]
+    pub team_id: Option<String>,
+}

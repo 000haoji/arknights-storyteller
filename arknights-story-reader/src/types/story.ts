@@ -115,6 +115,55 @@ export interface StoryCategory {
   stories: StoryEntry[];
 }
 
+// ==================== 干员相关类型 ====================
+
+export interface CharacterBasicInfo {
+  charId: string;
+  name: string;
+  appellation: string;
+  rarity: number;
+  profession: string;
+  subProfessionId: string;
+  position: string;
+  nationId?: string;
+  groupId?: string;
+  teamId?: string;
+}
+
+export interface CharacterHandbook {
+  charId: string;
+  charName: string;
+  rarity: number;
+  profession: string;
+  subProfession?: string;
+  storyTextAudio: HandbookStorySection[];
+}
+
+export interface HandbookStorySection {
+  storyTitle: string;
+  stories: HandbookStory[];
+}
+
+export interface HandbookStory {
+  storyText: string;
+  unLockType: string;
+  unLockParam: string;
+}
+
+export interface CharacterVoice {
+  charId: string;
+  charName: string;
+  voices: VoiceLine[];
+}
+
+export interface VoiceLine {
+  voiceId: string;
+  voiceTitle: string;
+  voiceText: string;
+  voiceIndex: number;
+  unlockType: string;
+}
+
 // 搜索结果
 export interface SearchResult {
   storyId: string;

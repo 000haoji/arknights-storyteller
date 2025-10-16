@@ -1,7 +1,7 @@
 use crate::data_service::DataService;
 use crate::models::{
-    Chapter, ParsedStoryContent, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
-    StoryIndexStatus,
+    Chapter, CharacterBasicInfo, CharacterHandbook, CharacterVoice, ParsedStoryContent,
+    SearchDebugResponse, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
 };
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
@@ -248,6 +248,38 @@ pub async fn get_rune_stories(state: State<'_, AppState>) -> Result<Vec<StoryEnt
     tauri::async_runtime::spawn_blocking(move || service.get_rune_stories())
         .await
         .map_err(|err| format!("Failed to join rune stories task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_characters_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<CharacterBasicInfo>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_characters_list())
+        .await
+        .map_err(|err| format!("Failed to join characters list task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_handbook(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterHandbook, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_handbook(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character handbook task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_voices(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterVoice, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_voices(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character voices task: {}", err))?
 }
 
 // ==================== Android Update Methods (Multi-fallback) ====================

@@ -941,40 +941,40 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       const fullStories = recordMap.get(name) ?? stories;
                       const groupKey = name.replace(/\s+/g, "_");
                       const groupId = `record:${groupKey}`;
+                      const fav = isGroupFavorite(groupId);
+                      const summaryEnabled = showSummaries;
                       return (
-                        <GroupContainer
+                        <Collapsible
                           key={`record-${index}`}
                           title={name}
-                          badgeCount={fullStories.length}
-                          isExpanded={expandedGroups[groupId]}
-                          onToggle={() => toggleGroup(groupId)}
-                          favoriteButton={
-                            <FavoriteGroupButton
-                              groupId={groupId}
-                              groupName={name}
-                              stories={fullStories}
-                              type="chapter"
-                              inactiveText="收藏笔记"
-                              activeText="取消收藏笔记"
-                            />
+                          defaultOpen={index === 0}
+                          actions={
+                            <div className="flex items-center gap-2">
+                              <GroupFavoriteButton
+                                isFavorite={fav}
+                                onToggle={() =>
+                                  toggleFavoriteGroup({ id: groupId, name, type: "chapter", stories: fullStories })
+                                }
+                                inactiveText="收藏笔记"
+                                activeText="取消收藏笔记"
+                              />
+                            </div>
                           }
                         >
-                          <div className="space-y-2">
-                            {stories.map((story) => (
-                              <StoryItem
-                                key={story.storyId}
-                                story={story}
-                                onSelect={onSelectStory}
-                                isFavorite={favoriteStoryIds.has(story.storyId)}
-                                onToggleFavorite={handleToggleFavorite}
-                                onToggleFavoriteGroup={(checked) => handleToggleFavoriteGroup(story, checked)}
-                                summaryVisible={showSummaries}
-                                summary={summaryCache[story.storyId]}
-                                summaryLoading={summaryLoadingIds[story.storyId]}
-                              />
-                            ))}
-                          </div>
-                        </GroupContainer>
+                          {stories.map((story) => (
+                            <StoryItem
+                              key={story.storyId}
+                              story={story}
+                              onSelectStory={onSelectStory}
+                              isFavorite={isFavorite(story.storyId)}
+                              onToggleFavorite={() => toggleFavorite(story)}
+                              showSummary={summaryEnabled}
+                              summary={summaryCache[story.storyId]}
+                              summaryLoading={Boolean(summaryLoadingIds[story.storyId])}
+                              onRequestSummary={handleRequestSummary}
+                            />
+                          ))}
+                        </Collapsible>
                       );
                     })}
                 </div>
@@ -993,13 +993,13 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       <StoryItem
                         key={story.storyId}
                         story={story}
-                        onSelect={onSelectStory}
-                        isFavorite={favoriteStoryIds.has(story.storyId)}
-                        onToggleFavorite={handleToggleFavorite}
-                        onToggleFavoriteGroup={(checked) => handleToggleFavoriteGroup(story, checked)}
-                        summaryVisible={showSummaries}
+                        onSelectStory={onSelectStory}
+                        isFavorite={isFavorite(story.storyId)}
+                        onToggleFavorite={() => toggleFavorite(story)}
+                        showSummary={showSummaries}
                         summary={summaryCache[story.storyId]}
-                        summaryLoading={summaryLoadingIds[story.storyId]}
+                        summaryLoading={Boolean(summaryLoadingIds[story.storyId])}
+                        onRequestSummary={handleRequestSummary}
                       />
                     ))}
                 </div>

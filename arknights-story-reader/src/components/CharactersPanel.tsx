@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/services/api";
-import type { ParsedStoryContent, StoryEntry } from "@/types/story";
+import type { 
+  ParsedStoryContent, 
+  StoryEntry, 
+  CharacterBasicInfo,
+  CharacterHandbook,
+  CharacterVoice 
+} from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/ui/collapsible";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, BookOpen, Mic, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFavoriteCharacters } from "@/hooks/useFavoriteCharacters";
 
 interface CharactersPanelProps {
   onOpenStory: (story: StoryEntry, character: string) => void;
 }
+
+type SubTab = "stats" | "handbook";
 
 interface CharacterStatsPerStory {
   story: StoryEntry;
@@ -44,6 +53,9 @@ function countCharactersInStory(content: ParsedStoryContent): Map<string, number
 }
 
 export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
+  const { isFavorite: isCharFavorite, toggleFavorite: toggleCharFavorite } = useFavoriteCharacters();
+  
+  const [subTab, setSubTab] = useState<SubTab>("stats");
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +68,16 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
   const [cacheUsed, setCacheUsed] = useState(false);
   const [cacheBuiltAt, setCacheBuiltAt] = useState<number | null>(null);
   const [version, setVersion] = useState<string | null>(null);
+  
+  // 档案相关状态
+  const [characters, setCharacters] = useState<CharacterBasicInfo[]>([]);
+  const [charactersLoading, setCharactersLoading] = useState(false);
+  const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
+  const [handbook, setHandbook] = useState<CharacterHandbook | null>(null);
+  const [voices, setVoices] = useState<CharacterVoice | null>(null);
+  const [handbookLoading, setHandbookLoading] = useState(false);
+  const [handbookSearch, setHandbookSearch] = useState("");
+  const [handbookTab, setHandbookTab] = useState<"archive" | "voice">("archive");
 
   const CACHE_PREFIX = "arknights-characters-cache";
   const getCacheKey = useCallback((v: string) => `${CACHE_PREFIX}:${v}`, []);
@@ -224,9 +246,50 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     }
   }, [getCacheKey]);
 
+  // 加载干员列表（用于档案标签页）
+  const loadCharacters = useCallback(async () => {
+    if (charactersLoading || characters.length > 0) return;
+    setCharactersLoading(true);
+    try {
+      const chars = await api.getCharactersList();
+      setCharacters(chars);
+    } catch (err) {
+      console.error("[CharactersPanel] 加载干员列表失败:", err);
+    } finally {
+      setCharactersLoading(false);
+    }
+  }, [charactersLoading, characters.length]);
+
+  // 加载指定干员的档案和语音
+  const loadCharacterData = useCallback(async (charId: string) => {
+    setHandbookLoading(true);
+    try {
+      const [handbookData, voicesData] = await Promise.all([
+        api.getCharacterHandbook(charId),
+        api.getCharacterVoices(charId),
+      ]);
+      setHandbook(handbookData);
+      setVoices(voicesData);
+    } catch (err) {
+      console.error("[CharactersPanel] 加载干员数据失败:", err);
+    } finally {
+      setHandbookLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    loadAll();
-  }, [loadAll]);
+    if (subTab === "stats") {
+      loadAll();
+    } else if (subTab === "handbook") {
+      loadCharacters();
+    }
+  }, [subTab, loadAll, loadCharacters]);
+
+  useEffect(() => {
+    if (selectedCharId) {
+      loadCharacterData(selectedCharId);
+    }
+  }, [selectedCharId, loadCharacterData]);
 
   useEffect(() => {
     const handler = () => {
@@ -272,81 +335,154 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     return Array.from(buckets.values()).sort((a, b) => a.order - b.order);
   }, [groupInfoByStoryId, selectedAgg]);
 
+  const filteredHandbookCharacters = useMemo(() => {
+    let filtered = characters;
+    const q = handbookSearch.trim().toLowerCase();
+    if (q) {
+      filtered = characters.filter((c) => 
+        c.name.toLowerCase().includes(q) || 
+        c.appellation.toLowerCase().includes(q)
+      );
+    }
+    
+    // 被收藏的干员排在前面
+    return filtered.sort((a, b) => {
+      const aFav = isCharFavorite(a.charId);
+      const bFav = isCharFavorite(b.charId);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      // 相同收藏状态下，按稀有度和名字排序
+      if (a.rarity !== b.rarity) return b.rarity - a.rarity;
+      return a.name.localeCompare(b.name, "zh-Hans");
+    });
+  }, [characters, handbookSearch, isCharFavorite]);
+
+  const professionMap: Record<string, string> = {
+    WARRIOR: "近卫",
+    SNIPER: "狙击",
+    TANK: "重装",
+    MEDIC: "医疗",
+    SUPPORT: "辅助",
+    CASTER: "术师",
+    SPECIAL: "特种",
+    PIONEER: "先锋",
+  };
+
+  const rarityStars = (rarity: number) => "★".repeat(rarity + 1);
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col bg-[hsl(var(--color-background))]">
+      {/* 子标签页切换 */}
+      <div className="px-4 pt-3 pb-2 border-b border-[hsl(var(--color-border))]">
+        <div className="flex gap-2">
+          <Button
+            variant={subTab === "stats" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => { 
+              setSubTab("stats"); 
+              setSelected(null);
+              setSelectedCharId(null);
+            }}
+          >
+            人物统计
+          </Button>
+          <Button
+            variant={subTab === "handbook" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => { 
+              setSubTab("handbook");
+              setSelected(null);
+              setSelectedCharId(null);
+            }}
+          >
+            人物档案
+          </Button>
+        </div>
+      </div>
+
       <header className="px-4 py-3 border-b border-[hsl(var(--color-border))] flex items-center gap-3">
-        {selected && (
-          <Button variant="ghost" size="icon" onClick={() => setSelected(null)} aria-label="返回">
+        {(selected || selectedCharId) && (
+          <Button variant="ghost" size="icon" onClick={() => {
+            setSelected(null);
+            setSelectedCharId(null);
+            setHandbook(null);
+            setVoices(null);
+          }} aria-label="返回">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         )}
         <h1 className="text-base font-semibold">
-          {selected ? `人物：${selected}` : "人物统计"}
+          {selected ? `人物：${selected}` : selectedCharId && handbook ? `${handbook.charName}` : subTab === "stats" ? "人物统计" : "人物档案"}
         </h1>
-        {!selected && (
+        {!selected && !selectedCharId && (
           <>
             <div className="ml-auto w-56">
-              <Input placeholder="搜索人物" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input 
+                placeholder={subTab === "stats" ? "搜索人物" : "搜索干员"} 
+                value={subTab === "stats" ? search : handbookSearch} 
+                onChange={(e) => subTab === "stats" ? setSearch(e.target.value) : setHandbookSearch(e.target.value)} 
+              />
             </div>
           </>
         )}
       </header>
 
-      <CustomScrollArea
-        className="flex-1"
-        trackOffsetTop="calc(3.25rem + 10px)"
-      >
-        <div className="p-4 space-y-4">
-          {loading && (
-            <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>
-                正在统计人物发言… {progress.current}/{progress.total}
-              </span>
-            </div>
-          )}
-          {error && (
-            <div className="text-sm text-[hsl(var(--color-destructive))]">{error}</div>
-          )}
-
-          {!loading && !selected && (
-            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
-              {cacheUsed && cacheBuiltAt
-                ? `已使用缓存，构建于 ${new Date(cacheBuiltAt).toLocaleString()}`
-                : version
-                ? `未使用缓存（版本 ${version}）`
-                : null}
-            </div>
-          )}
-
-          {!selected && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredCharacters.map((c) => (
-                <button
-                  key={c.name}
-                  className={cn(
-                    "flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 text-left hover:bg-[hsl(var(--color-accent))] transition-colors"
-                  )}
-                  onClick={() => setSelected(c.name)}
-                >
-                  <div className="font-medium truncate">{c.name}</div>
-                  <div className="text-xs text-[hsl(var(--color-muted-foreground))]">{c.total} 次</div>
-                </button>
-              ))}
-              {!loading && filteredCharacters.length === 0 && (
-                <div className="col-span-full text-sm text-[hsl(var(--color-muted-foreground))]">
-                  未找到匹配人物
+      <div className="flex-1 overflow-hidden">
+        <CustomScrollArea className="h-full">
+          <div className="p-4 space-y-4">
+          {/* 人物统计标签页 */}
+          {subTab === "stats" && !selectedCharId && (
+            <>
+              {loading && (
+                <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>
+                    正在统计人物发言… {progress.current}/{progress.total}
+                  </span>
                 </div>
               )}
-            </div>
-          )}
+              {error && (
+                <div className="text-sm text-[hsl(var(--color-destructive))]">{error}</div>
+              )}
 
-          {selected && selectedAgg && (
-            <div className="space-y-4">
-              <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
-                共计 {selectedAgg.total} 次发言，涉及 {selectedAgg.perStory.length} 个章节/关卡
-              </div>
-          {groupedByChapter.map((group, idx) => {
+              {!loading && !selected && (
+                <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                  {cacheUsed && cacheBuiltAt
+                    ? `已使用缓存，构建于 ${new Date(cacheBuiltAt).toLocaleString()}`
+                    : version
+                    ? `未使用缓存（版本 ${version}）`
+                    : null}
+                </div>
+              )}
+
+              {!selected && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredCharacters.map((c) => (
+                    <button
+                      key={c.name}
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 text-left hover:bg-[hsl(var(--color-accent))] transition-colors"
+                      )}
+                      onClick={() => setSelected(c.name)}
+                    >
+                      <div className="font-medium truncate">{c.name}</div>
+                      <div className="text-xs text-[hsl(var(--color-muted-foreground))]">{c.total} 次</div>
+                    </button>
+                  ))}
+                  {!loading && filteredCharacters.length === 0 && (
+                    <div className="col-span-full text-sm text-[hsl(var(--color-muted-foreground))]">
+                      未找到匹配人物
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selected && selectedAgg && (
+                <div className="space-y-4">
+                  <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
+                    共计 {selectedAgg.total} 次发言，涉及 {selectedAgg.perStory.length} 个章节/关卡
+                  </div>
+                  {groupedByChapter.map((group, idx) => {
             const key = group.groupName;
             const q = (groupSearch[key] ?? "").trim().toLowerCase();
             const items = q
@@ -401,10 +537,156 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
               </Collapsible>
             );
           })}
-            </div>
+                </div>
+              )}
+            </>
           )}
-        </div>
-      </CustomScrollArea>
+
+          {/* 人物档案标签页 */}
+          {subTab === "handbook" && (
+            <>
+              {charactersLoading && (
+                <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>正在加载干员列表…</span>
+                </div>
+              )}
+
+              {!selectedCharId && !charactersLoading && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {filteredHandbookCharacters.map((char) => {
+                    const isFav = isCharFavorite(char.charId);
+                    return (
+                      <div key={char.charId} className="relative">
+                        <button
+                          className={cn(
+                            "w-full flex flex-col items-start gap-2 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3 pr-10 text-left hover:bg-[hsl(var(--color-accent))] transition-colors",
+                            isFav && "ring-2 ring-[hsl(var(--color-primary))]"
+                          )}
+                          onClick={() => setSelectedCharId(char.charId)}
+                        >
+                          <div className="font-medium truncate w-full">{char.name}</div>
+                          <div className="text-xs text-[hsl(var(--color-muted-foreground))] truncate w-full flex items-center gap-2">
+                            <span>{professionMap[char.profession] || char.profession} · {char.appellation}</span>
+                            <span className="ml-auto">{rarityStars(char.rarity)}</span>
+                          </div>
+                        </button>
+                        <button
+                          className={cn(
+                            "absolute top-2 right-2 p-1 rounded-full transition-colors",
+                            isFav
+                              ? "text-[hsl(var(--color-primary))]"
+                              : "text-[hsl(var(--color-muted-foreground))] hover:text-[hsl(var(--color-primary))]"
+                          )}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCharFavorite(char.charId);
+                          }}
+                          aria-label={isFav ? "取消收藏" : "收藏"}
+                        >
+                          <Star className={cn("h-4 w-4", isFav && "fill-current")} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {!charactersLoading && filteredHandbookCharacters.length === 0 && (
+                    <div className="col-span-full text-sm text-[hsl(var(--color-muted-foreground))]">
+                      未找到匹配干员
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedCharId && (
+                <div className="space-y-4">
+                  {handbookLoading && (
+                    <div className="flex items-center gap-3 text-sm text-[hsl(var(--color-muted-foreground))]">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>正在加载干员数据…</span>
+                    </div>
+                  )}
+
+                  {!handbookLoading && handbook && voices && (
+                    <>
+                      {/* 档案/语音切换按钮 */}
+                      <div className="flex gap-2 pb-2 border-b border-[hsl(var(--color-border))]">
+                        <Button
+                          variant={handbookTab === "archive" ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() => setHandbookTab("archive")}
+                        >
+                          <BookOpen className="h-4 w-4 mr-2" />
+                          档案资料
+                        </Button>
+                        <Button
+                          variant={handbookTab === "voice" ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() => setHandbookTab("voice")}
+                        >
+                          <Mic className="h-4 w-4 mr-2" />
+                          语音 ({voices.voices.length})
+                        </Button>
+                      </div>
+
+                      {/* 档案资料 */}
+                      {handbookTab === "archive" && (
+                        <div className="space-y-4">
+                          {handbook.storyTextAudio.map((section, idx) => (
+                            <Collapsible key={idx} title={section.storyTitle} defaultOpen={idx === 0}>
+                              <div className="space-y-3">
+                                {section.stories.map((story, storyIdx) => (
+                                  <div
+                                    key={storyIdx}
+                                    className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4"
+                                  >
+                                    <div className="text-sm whitespace-pre-wrap leading-relaxed">
+                                      {story.storyText}
+                                    </div>
+                                    {story.unLockType !== "DIRECT" && (
+                                      <div className="text-xs text-[hsl(var(--color-muted-foreground))] mt-2">
+                                        解锁条件：{story.unLockType === "FAVOR" ? `好感度 ${story.unLockParam}` : story.unLockType}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </Collapsible>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 语音列表 */}
+                      {handbookTab === "voice" && (
+                        <div className="space-y-2">
+                          {voices.voices.map((voice) => (
+                            <div
+                              key={voice.voiceId}
+                              className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3"
+                            >
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="font-medium text-sm">{voice.voiceTitle}</div>
+                                {voice.unlockType !== "DIRECT" && (
+                                  <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                    {voice.unlockType === "FAVOR" ? "需要好感度" : voice.unlockType}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
+                                {voice.voiceText}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          </div>
+        </CustomScrollArea>
+      </div>
     </div>
   );
 }

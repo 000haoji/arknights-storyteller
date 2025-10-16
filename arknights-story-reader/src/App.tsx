@@ -7,6 +7,7 @@ import { Settings } from "@/components/Settings";
 import { BottomNav } from "@/components/BottomNav";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
+import { FavoriteCharactersProvider } from "@/hooks/useFavoriteCharacters";
 import { ClueSetsProvider } from "@/hooks/useClueSets";
 import { AppPreferencesProvider } from "@/hooks/useAppPreferences";
 import { ClueSetsPanel } from "@/components/ClueSetsPanel";
@@ -154,24 +155,32 @@ function App() {
   const appContent = (
     <div className="h-full flex flex-col overflow-hidden pt-[calc(env(safe-area-inset-top,0px)+20px)]">
       <div className="relative flex-1 overflow-hidden">
-        <KeepAlive active={!readerActive && activeTab === "stories"} className="absolute inset-0">
-          {storyListView}
-        </KeepAlive>
-        <KeepAlive
-          active={!readerActive && activeTab === "characters"}
-          className="absolute inset-0"
+        <div
+          className="absolute top-0 left-0 right-0"
+          style={{ bottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
         >
-          <CharactersPanel onOpenStory={handleOpenStoryWithCharacter} />
-        </KeepAlive>
-        <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
-          {searchView}
-        </KeepAlive>
-        <KeepAlive active={!readerActive && activeTab === "clues" && !clueReaderSetId} className="absolute inset-0">
-          {cluesView}
-        </KeepAlive>
-        <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
-          {settingsView}
-        </KeepAlive>
+          <KeepAlive active={!readerActive && activeTab === "stories"} className="absolute inset-0">
+            {storyListView}
+          </KeepAlive>
+          <KeepAlive
+            active={!readerActive && activeTab === "characters"}
+            className="absolute inset-0"
+          >
+            <CharactersPanel onOpenStory={handleOpenStoryWithCharacter} />
+          </KeepAlive>
+          <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
+            {searchView}
+          </KeepAlive>
+          <KeepAlive
+            active={!readerActive && activeTab === "clues" && !clueReaderSetId}
+            className="absolute inset-0"
+          >
+            {cluesView}
+          </KeepAlive>
+          <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
+            {settingsView}
+          </KeepAlive>
+        </div>
         {readerStory && (
           <KeepAlive active={readerActive} className="absolute inset-0">
             {readerView}
@@ -198,11 +207,13 @@ function App() {
   return (
     <ThemeProvider defaultTheme="dark" storageKey="story-teller-theme">
       <FavoritesProvider>
-        <AppPreferencesProvider>
-          <ClueSetsProvider>
-            {appContent}
-          </ClueSetsProvider>
-        </AppPreferencesProvider>
+        <FavoriteCharactersProvider>
+          <AppPreferencesProvider>
+            <ClueSetsProvider>
+              {appContent}
+            </ClueSetsProvider>
+          </AppPreferencesProvider>
+        </FavoriteCharactersProvider>
       </FavoritesProvider>
     </ThemeProvider>
   );
