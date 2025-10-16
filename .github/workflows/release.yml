@@ -202,7 +202,9 @@ jobs:
             exit 1
           fi
           RELEASE_NAME="arknights-story-reader-android-${VERSION}.apk"
-          gh release upload "$TAG" "$APK_PATH#$RELEASE_NAME" --clobber
+          RENAMED_APK="src-tauri/gen/android/app/build/outputs/apk/universal/release/${RELEASE_NAME}"
+          cp "$APK_PATH" "$RENAMED_APK"
+          gh release upload "$TAG" "$RENAMED_APK" --clobber
         working-directory: arknights-story-reader
 
       - name: Publish Android update manifest
