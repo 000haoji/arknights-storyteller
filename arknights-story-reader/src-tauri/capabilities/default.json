@@ -7,7 +7,7 @@
     "core:default"
   ],
   "allow": [
-    { "cmd": "plugin:apk-updater|download_and_install" },
-    { "cmd": "plugin:apk-updater|open_install_permission_settings" }
+    { "cmd": "plugin:apk-updater|download-and-install" },
+    { "cmd": "plugin:apk-updater|open-install-permission-settings" }
   ]
 }
