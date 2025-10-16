@@ -205,8 +205,15 @@ jobs:
         run: |
           APK_NAME="arknights-story-reader-android-${VERSION}.apk"
           JSON_PATH="android-latest.json"
-          printf '{\n  "version": "%s",\n  "notes": "",\n  "url": "https://github.com/%s/releases/download/%s/%s",\n  "fileName": "%s"\n}\n' \
-            "$VERSION" "$REPO" "$TAG" "$APK_NAME" "$APK_NAME" > "$JSON_PATH"
+          cat > "$JSON_PATH" <<EOF
+{
+  "version": "$VERSION",
+  "notes": "",
+  "url": "https://github.com/$REPO/releases/download/$TAG/$APK_NAME",
+  "fileName": "$APK_NAME"
+}
+EOF
+          cat "$JSON_PATH"
           gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
         working-directory: arknights-story-reader
 
