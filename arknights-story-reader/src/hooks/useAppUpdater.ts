@@ -48,6 +48,15 @@ export type AndroidInstallResponse = {
   needsPermission?: boolean;
 };
 
+export class UpdateError extends Error {
+  code: string;
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+    this.name = "UpdateError";
+  }
+}
+
 const enum CompareResult {
   Greater = 1,
   Equals = 0,
@@ -104,7 +113,7 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
   const feed = import.meta.env.VITE_ANDROID_UPDATE_FEED as string | undefined;
   if (!feed) {
     if (!suppressErrors) {
-      throw new Error("未配置安卓更新源 VITE_ANDROID_UPDATE_FEED");
+      throw new UpdateError("MISSING_FEED", "未配置安卓更新源 VITE_ANDROID_UPDATE_FEED");
     }
     console.info("[Updater] 未配置 VITE_ANDROID_UPDATE_FEED，跳过安卓更新检查");
     return null;
@@ -113,24 +122,29 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
   try {
     const response = await fetch(feed, { cache: "no-store", redirect: "follow" as const, mode: "cors" as const });
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new UpdateError("HTTP_ERROR", `更新源返回错误 HTTP ${response.status}`);
     }
     const raw = await response.json();
     // Path 1: Our custom manifest shape
     if (raw && typeof raw === "object" && "version" in raw && "url" in raw) {
       const data = raw as AndroidUpdateManifest;
       if (!data?.version || !data?.url) {
-        throw new Error("更新 manifest 缺少 version 或 url 字段");
+        throw new UpdateError("INVALID_MANIFEST", "更新 manifest 缺少 version 或 url 字段");
       }
       return data;
     }
     // Path 2: GitHub releases/latest API shape
     const gh = toManifestFromGithubLatestRelease(raw);
     if (gh) return gh;
-    throw new Error("不支持的更新源格式");
+    throw new UpdateError("UNSUPPORTED_FORMAT", "不支持的更新源格式");
   } catch (error) {
     if (!suppressErrors) {
-      throw error instanceof Error ? error : new Error(String(error));
+      if (error instanceof UpdateError) throw error;
+      if (error instanceof TypeError) {
+        // fetch 网络/CORS 失败通常为 TypeError
+        throw new UpdateError("NETWORK_ERROR", error.message || "网络异常，无法获取更新信息");
+      }
+      throw new UpdateError("UNKNOWN", error instanceof Error ? error.message : String(error));
     }
     console.error("[Updater] 获取安卓更新信息失败", error);
     return null;

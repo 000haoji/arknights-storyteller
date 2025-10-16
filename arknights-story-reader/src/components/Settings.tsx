@@ -17,6 +17,7 @@ import {
   openAndroidInstallPermissionSettings,
   type UpdateAvailability,
 } from "@/hooks/useAppUpdater";
+import { UpdateError } from "@/hooks/useAppUpdater";
 
 const THEME_COLOR_OPTIONS = [
   {
@@ -172,10 +173,31 @@ export function Settings() {
         setUpdateStatus("available");
       }
       } catch (error) {
-        // 网络失败、CORS 或第三方不可用等情况，优先返回“已是最新版本”的非致命反馈
         console.error("[Settings] 手动检查更新失败", error);
-        setUpdateStatus("up-to-date");
-        setUpdateMessage("当前已是最新版本");
+        setUpdateStatus("error");
+        if (error instanceof UpdateError) {
+          switch (error.code) {
+            case "MISSING_FEED":
+              setUpdateMessage("未配置安卓更新源，无法检查更新。请联系维护者。");
+              break;
+            case "NETWORK_ERROR":
+              setUpdateMessage("网络异常，无法获取更新信息。请检查网络后重试。");
+              break;
+            case "HTTP_ERROR":
+              setUpdateMessage(error.message);
+              break;
+            case "INVALID_MANIFEST":
+              setUpdateMessage("更新清单格式错误，缺少必要字段。");
+              break;
+            case "UNSUPPORTED_FORMAT":
+              setUpdateMessage("不支持的更新源格式。");
+              break;
+            default:
+              setUpdateMessage("未知错误，无法获取更新信息。");
+          }
+        } else {
+          setUpdateMessage(error instanceof Error ? error.message : String(error));
+        }
     }
   }, [runtimePlatform, appVersion]);
 
