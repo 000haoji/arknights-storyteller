@@ -248,7 +248,7 @@ export async function checkAndroidUpdate(currentVersionOverride?: string): Promi
 }
 
 export async function installAndroidUpdate(update: AndroidUpdateAvailable): Promise<AndroidInstallResponse> {
-  const response = await invoke<AndroidInstallResponse>("plugin:apk-updater|download_and_install", {
+  const response = await invoke<AndroidInstallResponse>("plugin:apk-updater|download-and-install", {
     url: update.manifest.url,
     fileName: update.manifest.fileName ?? null,
   });
@@ -256,7 +256,7 @@ export async function installAndroidUpdate(update: AndroidUpdateAvailable): Prom
 }
 
 export async function openAndroidInstallPermissionSettings(): Promise<void> {
-  await invoke("plugin:apk-updater|open_install_permission_settings");
+  await invoke("plugin:apk-updater|open-install-permission-settings");
 }
 
 export function useAppUpdater() {
