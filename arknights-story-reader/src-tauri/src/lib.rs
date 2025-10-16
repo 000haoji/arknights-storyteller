@@ -1,9 +1,10 @@
-#[cfg(target_os = "android")]
-mod apk_updater;
 mod commands;
 mod data_service;
 mod models;
 mod parser;
+
+#[cfg(target_os = "android")]
+mod apk_updater;
 
 use commands::AppState;
 use data_service::DataService;
