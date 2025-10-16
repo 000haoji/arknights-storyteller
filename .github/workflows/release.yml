@@ -123,8 +123,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add arknights-story-reader/package.json arknights-story-reader/package-lock.json arknights-story-reader/src-tauri/tauri.conf.json arknights-story-reader/src-tauri/Cargo.toml arknights-story-reader/src-tauri/Cargo.lock
-          git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}" || echo "No changes to commit"
+          cd arknights-story-reader
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml
+          [ -f src-tauri/Cargo.lock ] && git add src-tauri/Cargo.lock || true
+          cd ..
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.get_version.outputs.version }}"
           git push origin release || echo "Failed to push version bump"
 
       - name: Create GitHub Release
