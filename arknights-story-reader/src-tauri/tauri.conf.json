@@ -10,9 +10,6 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "capabilities": [
-      "capabilities/default.json"
-    ],
     "windows": [
       {
         "title": "明日方舟剧情阅读器",

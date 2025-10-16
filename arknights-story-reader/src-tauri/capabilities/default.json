@@ -1,5 +1,5 @@
 {
-  "$schema": "../gen/schemas/mobile-schema.json",
+  "$schema": "../gen/schemas/capabilities.json",
   "identifier": "default",
   "description": "Default capabilities for the application",
   "windows": ["main"],
