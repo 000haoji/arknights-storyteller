@@ -84,6 +84,21 @@ type ManifestOptions = {
   suppressErrors?: boolean;
 };
 
+async function tryFetchAnnouncements(version: string): Promise<string | null> {
+  try {
+    const url = (import.meta.env.VITE_ANDROID_ANNOUNCEMENTS_URL as string | undefined) ?? "";
+    if (!url) return null;
+    const res = await fetch(url, { cache: "no-store", redirect: "follow" as const, mode: "cors" as const });
+    if (!res.ok) return null;
+    const data = (await res.json()) as Record<string, string> | { entries?: Record<string, string> };
+    const map: Record<string, string> = (data as any)?.entries ?? (data as any);
+    const note = map?.[version];
+    return typeof note === "string" && note.trim().length > 0 ? note : null;
+  } catch {
+    return null;
+  }
+}
+
 function toManifestFromGithubLatestRelease(json: any): AndroidUpdateManifest | null {
   if (!json || typeof json !== "object") return null;
   const tag: string | undefined = json.tag_name;
@@ -131,11 +146,16 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
       if (!data?.version || !data?.url) {
         throw new UpdateError("INVALID_MANIFEST", "更新 manifest 缺少 version 或 url 字段");
       }
+      // Attach announcement notes if available
+      data.notes = data.notes ?? (await tryFetchAnnouncements(data.version));
       return data;
     }
     // Path 2: GitHub releases/latest API shape
     const gh = toManifestFromGithubLatestRelease(raw);
-    if (gh) return gh;
+    if (gh) {
+      gh.notes = gh.notes ?? (await tryFetchAnnouncements(gh.version));
+      return gh;
+    }
     throw new UpdateError("UNSUPPORTED_FORMAT", "不支持的更新源格式");
   } catch (error) {
     if (!suppressErrors) {

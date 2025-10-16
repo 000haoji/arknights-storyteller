@@ -525,7 +525,7 @@ export function Settings() {
                   </div>
                 ) : null}
 
-                {updateStatus === "up-to-date" ? (
+                {updateStatus === "up-to-date" && !updateMessage ? (
                   <p className="text-sm text-[hsl(var(--color-success))]">当前已是最新版本。</p>
                 ) : null}
 
