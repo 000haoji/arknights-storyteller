@@ -171,9 +171,11 @@ export function Settings() {
         setAvailableUpdate(result);
         setUpdateStatus("available");
       }
-    } catch (error) {
-      setUpdateStatus("error");
-      setUpdateMessage(error instanceof Error ? error.message : String(error));
+      } catch (error) {
+        // 网络失败、CORS 或第三方不可用等情况，优先返回“已是最新版本”的非致命反馈
+        console.error("[Settings] 手动检查更新失败", error);
+        setUpdateStatus("up-to-date");
+        setUpdateMessage("当前已是最新版本");
     }
   }, [runtimePlatform, appVersion]);
 

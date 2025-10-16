@@ -75,6 +75,30 @@ type ManifestOptions = {
   suppressErrors?: boolean;
 };
 
+function toManifestFromGithubLatestRelease(json: any): AndroidUpdateManifest | null {
+  if (!json || typeof json !== "object") return null;
+  const tag: string | undefined = json.tag_name;
+  const assets: Array<any> | undefined = json.assets;
+  if (!tag || !Array.isArray(assets)) return null;
+
+  // Derive version from tag, e.g. "app-v1.10.5" -> "1.10.5"
+  const normalizedVersion = String(tag).replace(/^app-v/i, "").replace(/^v/i, "").trim();
+
+  // Prefer APK asset by content_type or extension
+  const apkAsset =
+    assets.find((a) => /android|vnd\.android\.package-archive/i.test(String(a?.content_type ?? ""))) ||
+    assets.find((a) => typeof a?.name === "string" && a.name.toLowerCase().endsWith(".apk")) ||
+    null;
+  if (!apkAsset || !apkAsset.browser_download_url) return null;
+
+  return {
+    version: normalizedVersion,
+    url: String(apkAsset.browser_download_url),
+    fileName: String(apkAsset.name ?? "") || null,
+    notes: (json?.body as string | undefined) ?? null,
+  };
+}
+
 async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<AndroidUpdateManifest | null> {
   const { suppressErrors = false } = options;
   const feed = import.meta.env.VITE_ANDROID_UPDATE_FEED as string | undefined;
@@ -87,15 +111,23 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
   }
 
   try {
-    const response = await fetch(feed, { cache: "no-store" });
+    const response = await fetch(feed, { cache: "no-store", redirect: "follow" as const, mode: "cors" as const });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
-    const data = (await response.json()) as AndroidUpdateManifest;
-    if (!data?.version || !data?.url) {
-      throw new Error("更新 manifest 缺少 version 或 url 字段");
+    const raw = await response.json();
+    // Path 1: Our custom manifest shape
+    if (raw && typeof raw === "object" && "version" in raw && "url" in raw) {
+      const data = raw as AndroidUpdateManifest;
+      if (!data?.version || !data?.url) {
+        throw new Error("更新 manifest 缺少 version 或 url 字段");
+      }
+      return data;
     }
-    return data;
+    // Path 2: GitHub releases/latest API shape
+    const gh = toManifestFromGithubLatestRelease(raw);
+    if (gh) return gh;
+    throw new Error("不支持的更新源格式");
   } catch (error) {
     if (!suppressErrors) {
       throw error instanceof Error ? error : new Error(String(error));
