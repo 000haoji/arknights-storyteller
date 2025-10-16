@@ -1,9 +1,0 @@
-{
-  "identifier": "default",
-  "description": "Default permissions for the apk-updater plugin.",
-  "permissions": [
-    "allow-download-and-install"
-  ]
-}
-
-
