@@ -149,32 +149,30 @@ jobs:
         working-directory: arknights-story-reader
 
       - name: Restore Android keystore
+        env:
+          ANDROID_KEYSTORE_B64: "${{ secrets.ANDROID_KEYSTORE_B64 }}"
+          ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
+          ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
         run: |
           mkdir -p src-tauri/gen/android
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
-
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          cat <<EOF > src-tauri/gen/android/keystore.properties
-storePassword=$ANDROID_KEYSTORE_PASSWORD
-keyPassword=$KEY_PASSWORD
-keyAlias=${ANDROID_KEY_ALIAS}
-storeFile=$GITHUB_WORKSPACE/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
-EOF
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=${GITHUB_WORKSPACE}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
+          EOF
         working-directory: arknights-story-reader
 
       - name: Build signed Android APK
         env:
-          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          bash scripts/build-apk.sh
+          ANDROID_KEYSTORE_PATH: "${{ github.workspace }}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks"
+          ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
+          ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
+        run: bash scripts/build-apk.sh
         working-directory: arknights-story-reader
 
       - name: Upload APK to release
