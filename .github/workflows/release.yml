@@ -109,7 +109,8 @@ jobs:
             gh release create "$TAG" \
               --title "$RELEASE_NAME" \
               --notes "自动构建版本。Android APK 安装包。" \
-              --draft
+              --draft \
+              --latest
             echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           fi
 
@@ -137,6 +138,7 @@ jobs:
           ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
           ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
           ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
+          VITE_ANDROID_UPDATE_FEED: "https://github.com/${{ github.repository }}/releases/latest/download/android-latest.json"
         run: bash scripts/build-apk.sh
         working-directory: arknights-story-reader
 
@@ -167,6 +169,15 @@ jobs:
           printf '{\n  "version": "%s",\n  "notes": "",\n  "url": "https://github.com/%s/releases/download/%s/%s",\n  "fileName": "%s"\n}\n' \
             "$VERSION" "$REPO" "$TAG" "$APK_NAME" "$APK_NAME" > "$JSON_PATH"
           gh release upload "$TAG" "$JSON_PATH#$JSON_PATH" --clobber
+        working-directory: arknights-story-reader
+
+      - name: Publish release
+        env:
+          GH_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+          TAG: "${{ steps.create_release.outputs.tag }}"
+        run: |
+          echo "Publishing release $TAG"
+          gh release edit "$TAG" --draft=false
         working-directory: arknights-story-reader
 
       - name: Cleanup keystore
