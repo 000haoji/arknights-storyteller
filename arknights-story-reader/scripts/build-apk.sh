@@ -55,8 +55,12 @@ if [ ! -d node_modules ]; then
   npm ci
 fi
 
-info "Building web assets..."
-npm run build
+if [ -z "$SKIP_WEB_BUILD" ]; then
+  info "Building web assets..."
+  npm run build
+else
+  info "Skipping web build (SKIP_WEB_BUILD is set)"
+fi
 
 info "Building Android APK via Tauri (release profile)..."
 info "Target architecture: arm64-v8a only"

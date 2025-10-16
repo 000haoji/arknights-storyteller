@@ -153,6 +153,12 @@ jobs:
             echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Build frontend with update feed
+        env:
+          VITE_ANDROID_UPDATE_FEED: "https://github.com/${{ github.repository }}/releases/latest/download/android-latest.json"
+        run: npm run build
+        working-directory: arknights-story-reader
+
       - name: Restore Android keystore
         env:
           ANDROID_KEYSTORE_B64: "${{ secrets.ANDROID_KEYSTORE_B64 }}"
@@ -177,7 +183,7 @@ jobs:
           ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
           ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
           ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
-          VITE_ANDROID_UPDATE_FEED: "https://github.com/${{ github.repository }}/releases/latest/download/android-latest.json"
+          SKIP_WEB_BUILD: "1"
         run: bash scripts/build-apk.sh
         working-directory: arknights-story-reader
 
