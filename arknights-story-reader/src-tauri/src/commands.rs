@@ -1,7 +1,8 @@
 use crate::data_service::DataService;
 use crate::models::{
-    Chapter, CharacterBasicInfo, CharacterHandbook, CharacterVoice, ParsedStoryContent,
-    SearchDebugResponse, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
+    Chapter, CharacterBasicInfo, CharacterEquipment, CharacterHandbook, CharacterVoice,
+    ParsedStoryContent, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
+    StoryIndexStatus,
 };
 use crate::parser::parse_story_text;
 use std::sync::{Arc, Mutex};
@@ -280,6 +281,17 @@ pub async fn get_character_voices(
     tauri::async_runtime::spawn_blocking(move || service.get_character_voices(&char_id))
         .await
         .map_err(|err| format!("Failed to join character voices task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_equipment(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterEquipment, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_equipment(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character equipment task: {}", err))?
 }
 
 // ==================== Android Update Methods (Multi-fallback) ====================

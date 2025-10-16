@@ -164,6 +164,20 @@ export interface VoiceLine {
   unlockType: string;
 }
 
+export interface CharacterEquipment {
+  charId: string;
+  charName: string;
+  equipments: EquipmentInfo[];
+}
+
+export interface EquipmentInfo {
+  equipId: string;
+  equipName: string;
+  equipDesc: string;
+  equipShiningColor?: string;
+  typeName: string;
+}
+
 // 搜索结果
 export interface SearchResult {
   storyId: string;

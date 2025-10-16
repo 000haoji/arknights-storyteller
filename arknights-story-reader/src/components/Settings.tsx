@@ -622,14 +622,17 @@ export function Settings() {
                   <span className="text-[hsl(var(--color-muted-foreground))]">数据来源</span>
                   <span className="text-sm">ArknightsGameData</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-[hsl(var(--color-muted-foreground))]">交流群</span>
-                  <span className="text-sm">罗德岛重建管理委员会 994121470</span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </CustomScrollArea>
+              <div className="flex justify-between">
+                <span className="text-[hsl(var(--color-muted-foreground))]">交流群</span>
+                <span className="text-sm">罗德岛重建管理委员会 994121470</span>
+              </div>
+              <p className="text-xs text-[hsl(var(--color-muted-foreground))] leading-relaxed">
+                应用内所使用的文本原文，仅用于更好地表现游戏资料，其版权属于 Arknights / 上海鹰角网络科技有限公司。
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </CustomScrollArea>
       </main>
     </div>
   );

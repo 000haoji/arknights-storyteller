@@ -249,3 +249,27 @@ pub struct CharacterBasicInfo {
     #[serde(rename = "teamId")]
     pub team_id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterEquipment {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "equipments")]
+    pub equipments: Vec<EquipmentInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EquipmentInfo {
+    #[serde(rename = "equipId")]
+    pub equip_id: String,
+    #[serde(rename = "equipName")]
+    pub equip_name: String,
+    #[serde(rename = "equipDesc")]
+    pub equip_desc: String,
+    #[serde(rename = "equipShiningColor")]
+    pub equip_shining_color: Option<String>,
+    #[serde(rename = "typeName")]
+    pub type_name: String,
+}

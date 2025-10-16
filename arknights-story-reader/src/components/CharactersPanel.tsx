@@ -5,13 +5,14 @@ import type {
   StoryEntry, 
   CharacterBasicInfo,
   CharacterHandbook,
-  CharacterVoice 
+  CharacterVoice,
+  CharacterEquipment 
 } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/ui/collapsible";
-import { ArrowLeft, Loader2, BookOpen, Mic, Star } from "lucide-react";
+import { ArrowLeft, Loader2, BookOpen, Mic, Star, Package } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFavoriteCharacters } from "@/hooks/useFavoriteCharacters";
 
@@ -75,9 +76,10 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [handbook, setHandbook] = useState<CharacterHandbook | null>(null);
   const [voices, setVoices] = useState<CharacterVoice | null>(null);
+  const [equipment, setEquipment] = useState<CharacterEquipment | null>(null);
   const [handbookLoading, setHandbookLoading] = useState(false);
   const [handbookSearch, setHandbookSearch] = useState("");
-  const [handbookTab, setHandbookTab] = useState<"archive" | "voice">("archive");
+  const [handbookTab, setHandbookTab] = useState<"archive" | "voice" | "equipment">("archive");
 
   const CACHE_PREFIX = "arknights-characters-cache";
   const getCacheKey = useCallback((v: string) => `${CACHE_PREFIX}:${v}`, []);
@@ -260,16 +262,18 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     }
   }, [charactersLoading, characters.length]);
 
-  // 加载指定干员的档案和语音
+  // 加载指定干员的档案、语音和模组
   const loadCharacterData = useCallback(async (charId: string) => {
     setHandbookLoading(true);
     try {
-      const [handbookData, voicesData] = await Promise.all([
+      const [handbookData, voicesData, equipmentData] = await Promise.all([
         api.getCharacterHandbook(charId),
         api.getCharacterVoices(charId),
+        api.getCharacterEquipment(charId),
       ]);
       setHandbook(handbookData);
       setVoices(voicesData);
+      setEquipment(equipmentData);
     } catch (err) {
       console.error("[CharactersPanel] 加载干员数据失败:", err);
     } finally {
@@ -407,6 +411,7 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
             setSelectedCharId(null);
             setHandbook(null);
             setVoices(null);
+            setEquipment(null);
           }} aria-label="返回">
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -606,9 +611,9 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                     </div>
                   )}
 
-                  {!handbookLoading && handbook && voices && (
+                  {!handbookLoading && handbook && voices && equipment && (
                     <>
-                      {/* 档案/语音切换按钮 */}
+                      {/* 档案/语音/模组切换按钮 */}
                       <div className="flex gap-2 pb-2 border-b border-[hsl(var(--color-border))]">
                         <Button
                           variant={handbookTab === "archive" ? "default" : "ghost"}
@@ -625,6 +630,14 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                         >
                           <Mic className="h-4 w-4 mr-2" />
                           语音 ({voices.voices.length})
+                        </Button>
+                        <Button
+                          variant={handbookTab === "equipment" ? "default" : "ghost"}
+                          size="sm"
+                          onClick={() => setHandbookTab("equipment")}
+                        >
+                          <Package className="h-4 w-4 mr-2" />
+                          模组 ({equipment.equipments.length})
                         </Button>
                       </div>
 
@@ -676,6 +689,41 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                               </div>
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {/* 模组列表 */}
+                      {handbookTab === "equipment" && (
+                        <div className="space-y-3">
+                          {equipment.equipments.length === 0 ? (
+                            <div className="text-sm text-[hsl(var(--color-muted-foreground))] text-center py-8">
+                              该干员暂无模组
+                            </div>
+                          ) : (
+                            equipment.equipments.map((equip) => (
+                              <div
+                                key={equip.equipId}
+                                className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4"
+                              >
+                                <div className="flex items-start gap-3 mb-3">
+                                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-[hsl(var(--color-accent))] flex items-center justify-center">
+                                    <Package className="h-5 w-5 text-[hsl(var(--color-primary))]" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-medium text-base mb-1">{equip.equipName}</div>
+                                    {equip.typeName && (
+                                      <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                        {equip.typeName}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-sm text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap leading-relaxed">
+                                  {equip.equipDesc}
+                                </div>
+                              </div>
+                            ))
+                          )}
                         </div>
                       )}
                     </>

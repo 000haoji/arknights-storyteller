@@ -11,6 +11,7 @@ import type {
   CharacterBasicInfo,
   CharacterHandbook,
   CharacterVoice,
+  CharacterEquipment,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -215,5 +216,11 @@ export const api = {
   getCharacterVoices: async (charId: string): Promise<CharacterVoice> => {
     console.log("[API] 调用 get_character_voices, charId:", charId);
     return invoke("get_character_voices", { charId });
+  },
+
+  // 获取干员模组
+  getCharacterEquipment: async (charId: string): Promise<CharacterEquipment> => {
+    console.log("[API] 调用 get_character_equipment, charId:", charId);
+    return invoke("get_character_equipment", { charId });
   },
 };

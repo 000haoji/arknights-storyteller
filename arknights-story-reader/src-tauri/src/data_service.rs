@@ -13,9 +13,9 @@ use unicode_normalization::UnicodeNormalization;
 use zip::ZipArchive;
 
 use crate::models::{
-    Activity, Chapter, CharacterBasicInfo, CharacterHandbook, CharacterVoice, HandbookStory,
-    HandbookStorySection, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
-    StoryIndexStatus, StorySegment, VoiceLine,
+    Activity, Chapter, CharacterBasicInfo, CharacterEquipment, CharacterHandbook, CharacterVoice,
+    EquipmentInfo, HandbookStory, HandbookStorySection, SearchDebugResponse, SearchResult,
+    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, VoiceLine,
 };
 use crate::parser::parse_story_text;
 
@@ -2748,7 +2748,18 @@ impl DataService {
                     continue;
                 }
 
-                let rarity = char_data.get("rarity").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+                // 解析稀有度：TIER_1 -> 0, TIER_2 -> 1, ..., TIER_6 -> 5
+                let rarity = char_data
+                    .get("rarity")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| {
+                        if let Some(tier) = s.strip_prefix("TIER_") {
+                            tier.parse::<i32>().ok().map(|t| t - 1)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0);
 
                 let character = CharacterBasicInfo {
                     char_id: char_id.clone(),
@@ -3011,6 +3022,92 @@ impl DataService {
             char_id: char_id.to_string(),
             char_name,
             voices,
+        })
+    }
+
+    /// 获取干员模组信息
+    pub fn get_character_equipment(&self, char_id: &str) -> Result<CharacterEquipment, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let uniequip_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/uniequip_table.json");
+
+        let content = fs::read_to_string(&uniequip_file)
+            .map_err(|e| format!("Failed to read uniequip table: {}", e))?;
+
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse uniequip table: {}", e))?;
+
+        // 获取干员的模组列表
+        let char_equip = data
+            .get("charEquip")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "charEquip not found".to_string())?;
+
+        let equip_dict = data
+            .get("equipDict")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "equipDict not found".to_string())?;
+
+        // 获取干员名字
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_name = char_table
+            .get(char_id)
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let mut equipments = Vec::new();
+
+        // 获取该干员的所有模组ID
+        if let Some(equip_ids) = char_equip.get(char_id).and_then(|v| v.as_array()) {
+            for equip_id_value in equip_ids {
+                if let Some(equip_id) = equip_id_value.as_str() {
+                    // 获取模组详细信息
+                    if let Some(equip_data) = equip_dict.get(equip_id) {
+                        let equipment = EquipmentInfo {
+                            equip_id: equip_id.to_string(),
+                            equip_name: equip_data
+                                .get("uniEquipName")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            equip_desc: equip_data
+                                .get("uniEquipDesc")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                            equip_shining_color: equip_data
+                                .get("equipShiningColor")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string()),
+                            type_name: equip_data
+                                .get("typeName")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        };
+                        equipments.push(equipment);
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterEquipment {
+            char_id: char_id.to_string(),
+            char_name,
+            equipments,
         })
     }
 }

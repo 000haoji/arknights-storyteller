@@ -62,6 +62,7 @@ pub fn run() {
             commands::get_characters_list,
             commands::get_character_handbook,
             commands::get_character_voices,
+            commands::get_character_equipment,
             commands::import_from_zip,
             commands::import_from_zip_bytes,
             commands::get_chapters,
