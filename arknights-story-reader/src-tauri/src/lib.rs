@@ -57,6 +57,8 @@ pub fn run() {
             commands::get_sidestory_stories_grouped,
             commands::get_roguelike_stories_grouped,
             commands::get_memory_stories,
+            commands::get_record_stories_grouped,
+            commands::get_rune_stories,
             commands::import_from_zip,
             commands::import_from_zip_bytes,
             commands::get_chapters,

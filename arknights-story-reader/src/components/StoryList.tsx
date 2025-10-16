@@ -17,15 +17,19 @@ const CATEGORY_TABS = [
   { id: "sidestory" as const, label: "支线" },
   { id: "roguelike" as const, label: "肉鸽" },
   { id: "memory" as const, label: "干员密录" },
+  { id: "record" as const, label: "主线笔记" },
+  { id: "rune" as const, label: "危机合约" },
 ];
 
-const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "sidestory" | "roguelike" | "memory", string> = {
+const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "sidestory" | "roguelike" | "memory" | "record" | "rune", string> = {
   favorites: "收藏喜爱的章节或关卡",
   main: "主线章节",
   activity: "活动剧情列表",
   sidestory: "支线故事",
   roguelike: "肉鸽模式剧情",
   memory: "干员密录故事",
+  record: "主线章节笔记与日志",
+  rune: "危机合约剧情",
 };
 
 interface StoryListProps {
@@ -37,7 +41,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'favorites' | 'main' | 'activity' | 'sidestory' | 'roguelike' | 'memory'>('main');
+  const [activeCategory, setActiveCategory] = useState<'favorites' | 'main' | 'activity' | 'sidestory' | 'roguelike' | 'memory' | 'record' | 'rune'>('main');
   const [activityGrouped, setActivityGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
@@ -50,6 +54,12 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [memoryStories, setMemoryStories] = useState<StoryEntry[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryLoaded, setMemoryLoaded] = useState(false);
+  const [recordGrouped, setRecordGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [recordLoaded, setRecordLoaded] = useState(false);
+  const [runeStories, setRuneStories] = useState<StoryEntry[]>([]);
+  const [runeLoading, setRuneLoading] = useState(false);
+  const [runeLoaded, setRuneLoaded] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const { showSummaries, setShowSummaries } = useAppPreferences();
   const [summaryCache, setSummaryCache] = useState<Record<string, string>>({});
@@ -154,6 +164,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const activityMap = useMemo(() => new Map(activityGrouped), [activityGrouped]);
   const sidestoryMap = useMemo(() => new Map(sidestoryGrouped), [sidestoryGrouped]);
   const roguelikeMap = useMemo(() => new Map(roguelikeGrouped), [roguelikeGrouped]);
+  const recordMap = useMemo(() => new Map(recordGrouped), [recordGrouped]);
 
   const filteredMainGrouped = useMemo(() => {
     if (!hasSearch) return mainGrouped;
@@ -217,6 +228,25 @@ export function StoryList({ onSelectStory }: StoryListProps) {
     if (!hasSearch) return memoryStories;
     return memoryStories.filter(matchesSearch);
   }, [hasSearch, matchesSearch, memoryStories]);
+
+  const filteredRecordGrouped = useMemo(() => {
+    if (!hasSearch) return recordGrouped;
+    return recordGrouped
+      .map(([chapterName, stories]) => {
+        const chapterMatches = chapterName.toLowerCase().includes(normalizedSearch);
+        if (chapterMatches) {
+          return [chapterName, stories] as [string, StoryEntry[]];
+        }
+        const filtered = stories.filter(matchesSearch);
+        return filtered.length > 0 ? ([chapterName, filtered] as [string, StoryEntry[]]) : null;
+      })
+      .filter((group): group is [string, StoryEntry[]] => group !== null);
+  }, [recordGrouped, hasSearch, matchesSearch, normalizedSearch]);
+
+  const filteredRuneStories = useMemo(() => {
+    if (!hasSearch) return runeStories;
+    return runeStories.filter(matchesSearch);
+  }, [hasSearch, matchesSearch, runeStories]);
 
   const favoriteGroupList = useMemo(() => {
     if (favoriteGroupEntries.length === 0) return [];
@@ -432,6 +462,10 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       void loadSidestories();
     } else if (activeCategory === 'roguelike') {
       void loadRoguelike();
+    } else if (activeCategory === 'record') {
+      void loadRecord();
+    } else if (activeCategory === 'rune') {
+      void loadRune();
     }
   }, [activeCategory]);
 
@@ -524,6 +558,64 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       }
     } finally {
       setMemoryLoading(false);
+    }
+  };
+
+  const loadRecord = async () => {
+    if (recordLoaded) return;
+    console.log("[StoryList] 开始加载主线笔记");
+    try {
+      setRecordLoading(true);
+      const withTimeout = async <T,>(promise: Promise<T>, ms = 30000) => {
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("TIMEOUT")), ms);
+        });
+        return Promise.race([promise, timeout]);
+      };
+      const grouped = await withTimeout(api.getRecordStoriesGrouped());
+      console.log("[StoryList] 主线笔记项目数:", grouped.length);
+      setRecordGrouped(grouped);
+      setRecordLoaded(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载主线笔记失败:", errorMsg, err);
+      if (errorMsg.includes("NOT_INSTALLED") || errorMsg.includes("No such file") || errorMsg === "TIMEOUT") {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setRecordLoading(false);
+    }
+  };
+
+  const loadRune = async () => {
+    if (runeLoaded) return;
+    console.log("[StoryList] 开始加载危机合约");
+    try {
+      setRuneLoading(true);
+      const withTimeout = async <T,>(promise: Promise<T>, ms = 30000) => {
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("TIMEOUT")), ms);
+        });
+        return Promise.race([promise, timeout]);
+      };
+      const stories = await withTimeout(api.getRuneStories());
+      console.log("[StoryList] 危机合约文本数:", stories.length);
+      setRuneStories(stories);
+      setRuneLoaded(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载危机合约失败:", errorMsg, err);
+      if (errorMsg.includes("NOT_INSTALLED") || errorMsg.includes("No such file") || errorMsg === "TIMEOUT") {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setRuneLoading(false);
     }
   };
 
@@ -835,6 +927,81 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         </Collapsible>
                       );
                     })}
+                </div>
+              )}
+
+              {activeCategory === "record" && (
+                <div className="space-y-3">
+                  {recordLoading && <EmptyState message="主线笔记加载中..." />}
+                  {!recordLoading && filteredRecordGrouped.length === 0 && (
+                    <EmptyState message={hasSearch ? "没有匹配的主线笔记" : "暂无主线笔记或需要同步"} />
+                  )}
+                  {!recordLoading &&
+                    filteredRecordGrouped.map(([name, stories], index) => {
+                      const fullStories = recordMap.get(name) ?? stories;
+                      const groupKey = name.replace(/\s+/g, "_");
+                      const groupId = `record:${groupKey}`;
+                      return (
+                        <GroupContainer
+                          key={`record-${index}`}
+                          title={name}
+                          badgeCount={fullStories.length}
+                          isExpanded={expandedGroups[groupId]}
+                          onToggle={() => toggleGroup(groupId)}
+                          favoriteButton={
+                            <FavoriteGroupButton
+                              groupId={groupId}
+                              groupName={name}
+                              stories={fullStories}
+                              type="chapter"
+                              inactiveText="收藏笔记"
+                              activeText="取消收藏笔记"
+                            />
+                          }
+                        >
+                          <div className="space-y-2">
+                            {stories.map((story) => (
+                              <StoryItem
+                                key={story.storyId}
+                                story={story}
+                                onSelect={onSelectStory}
+                                isFavorite={favoriteStoryIds.has(story.storyId)}
+                                onToggleFavorite={handleToggleFavorite}
+                                onToggleFavoriteGroup={(checked) => handleToggleFavoriteGroup(story, checked)}
+                                summaryVisible={showSummaries}
+                                summary={summaryCache[story.storyId]}
+                                summaryLoading={summaryLoadingIds[story.storyId]}
+                              />
+                            ))}
+                          </div>
+                        </GroupContainer>
+                      );
+                    })}
+                </div>
+              )}
+
+              {activeCategory === "rune" && (
+                <div className="space-y-2">
+                  {runeLoading && <EmptyState message="危机合约剧情加载中..." />}
+                  {!runeLoading && filteredRuneStories.length === 0 && (
+                    <EmptyState
+                      message={hasSearch ? "没有匹配的危机合约剧情" : "暂无危机合约剧情或需要同步"}
+                    />
+                  )}
+                  {!runeLoading &&
+                    filteredRuneStories.map((story) => (
+                      <StoryItem
+                        key={story.storyId}
+                        story={story}
+                        onSelect={onSelectStory}
+                        isFavorite={favoriteStoryIds.has(story.storyId)}
+                        onToggleFavorite={handleToggleFavorite}
+                        onToggleFavoriteGroup={(checked) => handleToggleFavoriteGroup(story, checked)}
+                        summaryVisible={showSummaries}
+                        summary={summaryCache[story.storyId]}
+                        summaryLoading={summaryLoadingIds[story.storyId]}
+                      />
+                    ))}
                 </div>
               )}
 

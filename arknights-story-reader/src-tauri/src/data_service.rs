@@ -2024,7 +2024,8 @@ impl DataService {
                 Value::Object(obj) => {
                     if let Some(cp) = obj.get("contentPath").and_then(|x| x.as_str()) {
                         let lower = cp.to_ascii_lowercase();
-                        if lower.starts_with("obt/roguelike/") {
+                        // 支持两个肉鸽目录：obt/roguelike/ 和 obt/rogue/
+                        if lower.starts_with("obt/roguelike/") || lower.starts_with("obt/rogue/") {
                             let desc = obj
                                 .get("desc")
                                 .and_then(|x| x.as_str())
@@ -2052,26 +2053,92 @@ impl DataService {
         }
         collect_content_paths(&mut path_desc_map, &meta_value);
 
-        // 使用 story_table 作为权威来源，枚举所有 Obt/Roguelike 文本
+        // 1. 使用 story_table 作为权威来源，枚举所有 Obt/Roguelike 文本（ro1~ro5的关卡剧情）
         let story_table_file = self.data_dir.join("zh_CN/gamedata/excel/story_table.json");
         let story_table_content = fs::read_to_string(&story_table_file)
             .map_err(|e| format!("Failed to read story table file: {}", e))?;
         let table_obj: HashMap<String, Value> = serde_json::from_str(&story_table_content)
             .map_err(|e| format!("Failed to parse story table: {}", e))?;
 
+        // 2. 使用 roguelike_topic_table 获取 Obt/Rogue 下的剧情（月度聊天、终章、挑战等）
+        let roguelike_topic_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/roguelike_topic_table.json");
+        let roguelike_topic_content = fs::read_to_string(&roguelike_topic_file)
+            .map_err(|e| format!("Failed to read roguelike topic file: {}", e))?;
+        let roguelike_topic_value: Value = serde_json::from_str(&roguelike_topic_content)
+            .map_err(|e| format!("Failed to parse roguelike topic data: {}", e))?;
+
         let mut grouped: HashMap<String, Vec<StoryEntry>> = HashMap::new();
         let mut counters: HashMap<String, i32> = HashMap::new();
 
+        // Helper: 递归提取所有包含剧情路径的字段
+        fn extract_story_ids_from_value(val: &Value, story_ids: &mut Vec<String>) {
+            match val {
+                Value::String(s) => {
+                    let lower = s.to_ascii_lowercase();
+                    if lower.starts_with("obt/rogue/") || lower.starts_with("obt/roguelike/") {
+                        story_ids.push(s.clone());
+                    }
+                }
+                Value::Object(obj) => {
+                    for v in obj.values() {
+                        extract_story_ids_from_value(v, story_ids);
+                    }
+                }
+                Value::Array(arr) => {
+                    for v in arr {
+                        extract_story_ids_from_value(v, story_ids);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 从 roguelike_topic_table 中提取剧情ID
+        let mut roguelike_story_ids = Vec::new();
+        extract_story_ids_from_value(&roguelike_topic_value, &mut roguelike_story_ids);
+
+        // 处理 story_table 中的条目
         for (key, _v) in table_obj.into_iter() {
             let lower = key.to_ascii_lowercase();
-            if !lower.starts_with("obt/roguelike/") {
+            // 支持两个肉鸽目录：obt/roguelike/ 和 obt/rogue/
+            if !lower.starts_with("obt/roguelike/") && !lower.starts_with("obt/rogue/") {
                 continue;
             }
-            let group_key = lower
-                .split('/')
-                .nth(2)
-                .map(|s| s.to_uppercase())
-                .unwrap_or_else(|| "ROGUE".to_string());
+            
+            // 智能提取分组键
+            // obt/roguelike/ro1/... -> RO1
+            // obt/rogue/month_chat_rogue_1_1/... -> MONTH_CHAT_ROGUE_1
+            // obt/rogue/rogue_2/endbook/... -> ROGUE_2
+            let group_key = if lower.starts_with("obt/roguelike/") {
+                // roguelike 目录：使用第三段作为分组键
+                lower
+                    .split('/')
+                    .nth(2)
+                    .map(|s| s.to_uppercase())
+                    .unwrap_or_else(|| "ROGUE".to_string())
+            } else {
+                // rogue 目录：需要特殊处理多层结构
+                let parts: Vec<&str> = lower.split('/').collect();
+                if parts.len() >= 3 {
+                    let third_part = parts[2];
+                    // month_chat_rogue_1_1 -> MONTH_CHAT_ROGUE_1
+                    if third_part.starts_with("month_chat_rogue_") {
+                        // 提取到倒数第二个下划线之前
+                        let prefix = third_part.rsplitn(2, '_').nth(1).unwrap_or(third_part);
+                        prefix.to_uppercase()
+                    } else if third_part.starts_with("rogue_") {
+                        // rogue_2, rogue_3, ... -> ROGUE_2, ROGUE_3, ...
+                        third_part.to_uppercase()
+                    } else {
+                        third_part.to_uppercase()
+                    }
+                } else {
+                    "ROGUE".to_string()
+                }
+            };
+            
             let sort = counters
                 .entry(group_key.clone())
                 .and_modify(|x| *x += 1)
@@ -2083,6 +2150,66 @@ impl DataService {
 
             let entry = StoryEntry {
                 story_id: key.clone(),
+                story_name: name,
+                story_code: None,
+                story_group: group_key.clone(),
+                story_sort: *sort,
+                avg_tag: None,
+                story_txt: lower.clone(),
+                story_info: None,
+                story_review_type: "ROGUELIKE".to_string(),
+                unlock_type: "NONE".to_string(),
+                story_dependence: None,
+                story_can_show: None,
+                story_can_enter: None,
+                stage_count: None,
+                required_stages: None,
+                cost_item_type: None,
+                cost_item_id: None,
+                cost_item_count: None,
+            };
+
+            grouped.entry(group_key).or_default().push(entry);
+        }
+
+        // 处理 roguelike_topic_table 中提取的剧情ID
+        for story_id in roguelike_story_ids {
+            let lower = story_id.to_ascii_lowercase();
+            
+            // 智能提取分组键（同样的逻辑）
+            let group_key = if lower.starts_with("obt/roguelike/") {
+                lower
+                    .split('/')
+                    .nth(2)
+                    .map(|s| s.to_uppercase())
+                    .unwrap_or_else(|| "ROGUE".to_string())
+            } else {
+                let parts: Vec<&str> = lower.split('/').collect();
+                if parts.len() >= 3 {
+                    let third_part = parts[2];
+                    if third_part.starts_with("month_chat_rogue_") {
+                        let prefix = third_part.rsplitn(2, '_').nth(1).unwrap_or(third_part);
+                        prefix.to_uppercase()
+                    } else if third_part.starts_with("rogue_") {
+                        third_part.to_uppercase()
+                    } else {
+                        third_part.to_uppercase()
+                    }
+                } else {
+                    "ROGUE".to_string()
+                }
+            };
+            
+            let sort = counters
+                .entry(group_key.clone())
+                .and_modify(|x| *x += 1)
+                .or_insert(1);
+            let name = path_desc_map.get(&lower).cloned().unwrap_or_else(|| {
+                story_id.split('/').last().unwrap_or(&story_id).to_string()
+            });
+
+            let entry = StoryEntry {
+                story_id: story_id.clone(),
                 story_name: name,
                 story_code: None,
                 story_group: group_key.clone(),
@@ -2132,6 +2259,255 @@ impl DataService {
             .map_err(|e| format!("Failed to parse story review data: {}", e))?;
 
         let stories = self.parse_stories_by_entry_type(&data, "NONE")?;
+        Ok(stories)
+    }
+
+    /// 获取主线笔记剧情（按章节分组）
+    pub fn get_record_stories_grouped(&self) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let zone_table_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/zone_table.json");
+
+        let content = fs::read_to_string(&zone_table_file)
+            .map_err(|e| format!("Failed to read zone table file: {}", e))?;
+
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse zone table data: {}", e))?;
+
+        // 获取章节信息
+        let zones = data
+            .get("zones")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "zones not found in zone_table".to_string())?;
+
+        // 获取笔记信息
+        let zone_records = data
+            .get("zoneRecords")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "zoneRecords not found in zone_table".to_string())?;
+
+        let mut groups: Vec<(String, Vec<StoryEntry>, String)> = Vec::new();
+
+        for (zone_id, zone_record_value) in zone_records.iter() {
+            // 只处理主线章节的笔记
+            if !zone_id.starts_with("main_") {
+                continue;
+            }
+
+            let records = zone_record_value
+                .get("records")
+                .and_then(|v| v.as_array())
+                .unwrap_or(&vec![]);
+
+            if records.is_empty() {
+                continue;
+            }
+
+            // 获取章节名称
+            let chapter_name = zones
+                .get(zone_id)
+                .and_then(|z| {
+                    let first = z.get("zoneNameFirst").and_then(|v| v.as_str()).unwrap_or("");
+                    let second = z.get("zoneNameSecond").and_then(|v| v.as_str()).unwrap_or("");
+                    if first.is_empty() && second.is_empty() {
+                        None
+                    } else if second.is_empty() {
+                        Some(first.to_string())
+                    } else {
+                        Some(format!("{} {}", first, second))
+                    }
+                })
+                .unwrap_or_else(|| zone_id.to_uppercase());
+
+            let mut stories = Vec::new();
+            for (idx, record) in records.iter().enumerate() {
+                let record_id = record
+                    .get("recordId")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let title_name = record
+                    .get("recordTitleName")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                // 从 rewards 中找到包含 textPath 的条目
+                if let Some(rewards) = record.get("rewards").and_then(|v| v.as_array()) {
+                    for reward in rewards {
+                        if let Some(text_path) = reward
+                            .get("textPath")
+                            .and_then(|v| v.as_str())
+                            .filter(|s| !s.is_empty())
+                        {
+                            let story_name = if title_name.is_empty() {
+                                format!("笔记 {}", idx + 1)
+                            } else {
+                                format!("笔记 {}", title_name)
+                            };
+
+                            let entry = StoryEntry {
+                                story_id: format!("{}_{}", zone_id, record_id),
+                                story_name,
+                                story_code: None,
+                                story_group: zone_id.to_string(),
+                                story_sort: idx as i32 + 1,
+                                avg_tag: Some("笔记".to_string()),
+                                story_txt: text_path.to_ascii_lowercase(),
+                                story_info: None,
+                                story_review_type: "RECORD".to_string(),
+                                unlock_type: "NONE".to_string(),
+                                story_dependence: None,
+                                story_can_show: None,
+                                story_can_enter: None,
+                                stage_count: None,
+                                required_stages: None,
+                                cost_item_type: None,
+                                cost_item_id: None,
+                                cost_item_count: None,
+                            };
+                            stories.push(entry);
+                            break; // 只取第一个有效的 textPath
+                        }
+                    }
+                }
+            }
+
+            if !stories.is_empty() {
+                groups.push((chapter_name, stories, zone_id.clone()));
+            }
+        }
+
+        // 按 zone_id 排序
+        groups.sort_by(|a, b| compare_story_group_ids(&a.2, &b.2));
+
+        Ok(groups
+            .into_iter()
+            .map(|(name, stories, _)| (name, stories))
+            .collect())
+    }
+
+    /// 获取危机合约剧情
+    pub fn get_rune_stories(&self) -> Result<Vec<StoryEntry>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let rune_dir = self.data_dir.join("zh_CN/gamedata/story/obt/rune");
+        if !rune_dir.exists() {
+            return Ok(Vec::new());
+        }
+
+        let mut stories = Vec::new();
+
+        // 扫描 rune 目录
+        let entries = fs::read_dir(&rune_dir)
+            .map_err(|e| format!("Failed to read rune directory: {}", e))?;
+
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let path = entry.path();
+
+            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("txt") {
+                let file_name = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown");
+
+                let story_name = if file_name.contains("overall") {
+                    "危机合约 - 序章".to_string()
+                } else {
+                    format!("危机合约 - {}", file_name.replace('_', " "))
+                };
+
+                let story_txt = format!(
+                    "obt/rune/{}",
+                    path.file_name().and_then(|s| s.to_str()).unwrap_or(file_name)
+                )
+                .replace(".txt", "");
+
+                stories.push(StoryEntry {
+                    story_id: format!("rune_{}", file_name),
+                    story_name,
+                    story_code: None,
+                    story_group: "rune".to_string(),
+                    story_sort: stories.len() as i32 + 1,
+                    avg_tag: Some("危机合约".to_string()),
+                    story_txt,
+                    story_info: None,
+                    story_review_type: "RUNE".to_string(),
+                    unlock_type: "NONE".to_string(),
+                    story_dependence: None,
+                    story_can_show: None,
+                    story_can_enter: None,
+                    stage_count: None,
+                    required_stages: None,
+                    cost_item_type: None,
+                    cost_item_id: None,
+                    cost_item_count: None,
+                });
+            } else if path.is_dir() {
+                // 扫描子目录
+                let sub_entries = fs::read_dir(&path)
+                    .map_err(|e| format!("Failed to read rune subdirectory: {}", e))?;
+
+                for sub_entry in sub_entries {
+                    let sub_entry = sub_entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                    let sub_path = sub_entry.path();
+
+                    if sub_path.is_file()
+                        && sub_path.extension().and_then(|s| s.to_str()) == Some("txt")
+                    {
+                        let file_name = sub_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown");
+
+                        let folder_name = path
+                            .file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown");
+
+                        let story_name = format!("危机合约 - {} - {}", folder_name, file_name);
+
+                        let story_txt = format!(
+                            "obt/rune/{}/{}",
+                            folder_name,
+                            sub_path
+                                .file_name()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or(file_name)
+                        )
+                        .replace(".txt", "");
+
+                        stories.push(StoryEntry {
+                            story_id: format!("rune_{}_{}", folder_name, file_name),
+                            story_name,
+                            story_code: None,
+                            story_group: "rune".to_string(),
+                            story_sort: stories.len() as i32 + 1,
+                            avg_tag: Some("危机合约".to_string()),
+                            story_txt,
+                            story_info: None,
+                            story_review_type: "RUNE".to_string(),
+                            unlock_type: "NONE".to_string(),
+                            story_dependence: None,
+                            story_can_show: None,
+                            story_can_enter: None,
+                            stage_count: None,
+                            required_stages: None,
+                            cost_item_type: None,
+                            cost_item_id: None,
+                            cost_item_count: None,
+                        });
+                    }
+                }
+            }
+        }
+
+        stories.sort_by_key(|s| s.story_sort);
         Ok(stories)
     }
 }

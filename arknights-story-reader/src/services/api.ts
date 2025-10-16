@@ -183,4 +183,16 @@ export const api = {
     console.log("[API] 调用 get_memory_stories");
     return invoke("get_memory_stories");
   },
+
+  // 获取主线笔记剧情（按章节分组）
+  getRecordStoriesGrouped: async (): Promise<Array<[string, StoryEntry[]]>> => {
+    console.log("[API] 调用 get_record_stories_grouped");
+    return invoke("get_record_stories_grouped");
+  },
+
+  // 获取危机合约剧情
+  getRuneStories: async (): Promise<StoryEntry[]> => {
+    console.log("[API] 调用 get_rune_stories");
+    return invoke("get_rune_stories");
+  },
 };

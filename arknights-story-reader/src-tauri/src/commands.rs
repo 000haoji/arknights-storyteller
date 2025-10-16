@@ -232,6 +232,24 @@ pub async fn get_memory_stories(state: State<'_, AppState>) -> Result<Vec<StoryE
         .map_err(|err| format!("Failed to join memory stories task: {}", err))?
 }
 
+#[tauri::command]
+pub async fn get_record_stories_grouped(
+    state: State<'_, AppState>,
+) -> Result<Vec<(String, Vec<StoryEntry>)>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_record_stories_grouped())
+        .await
+        .map_err(|err| format!("Failed to join record stories grouped task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_rune_stories(state: State<'_, AppState>) -> Result<Vec<StoryEntry>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_rune_stories())
+        .await
+        .map_err(|err| format!("Failed to join rune stories task: {}", err))?
+}
+
 // ==================== Android Update Methods (Multi-fallback) ====================
 
 #[cfg(target_os = "android")]
