@@ -243,7 +243,12 @@ pub async fn android_update_method1_plugin_direct(
 ) -> Result<AndroidInstallResponse, String> {
     use tauri::Manager;
     let updater = app.state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>();
-    updater.download_and_install(url, file_name)
+    updater
+        .download_and_install(url, file_name)
+        .map(|res| AndroidInstallResponse {
+            status: res.status,
+            needs_permission: res.needs_permission,
+        })
 }
 
 #[cfg(target_os = "android")]
@@ -298,15 +303,10 @@ pub async fn android_update_method2_http_download(
 fn install_apk_via_intent(app: AppHandle, apk_path: std::path::PathBuf) -> Result<AndroidInstallResponse, String> {
     use tauri::Manager;
     
-    #[derive(Serialize)]
-    struct InstallArgs {
-        path: String,
-    }
-
     let path_str = apk_path.to_string_lossy().to_string();
     
     // Try plugin's install helper if available
-    if let Some(updater) = app.try_state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>() {
+    if let Some(_updater) = app.try_state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>() {
         // Try to use native plugin to trigger install
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // This would need additional helper in plugin, skip for now
