@@ -52,11 +52,18 @@ Android 应用检测更新
 
 ### 1. 工作流配置
 
-**文件位置：** `.github/workflows/release.yml`
+**文件位置：** `.github/workflows/release.yml`（项目根目录）
+
+**项目结构说明：**
+- 本项目采用嵌套结构：根目录下有 `arknights-story-reader` 子目录
+- 所有构建步骤使用 `working-directory: arknights-story-reader`
+- GitHub Actions 工作流在根目录的 `.github/workflows/`
 
 #### 触发条件
 
 ```yaml
+name: release-android  # 工作流名称
+
 on:
   workflow_dispatch:  # 手动触发
   push:
@@ -255,11 +262,11 @@ check-android-secrets:
     echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
     KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
     cat > src-tauri/gen/android/keystore.properties <<EOF
-    storePassword=${ANDROID_KEYSTORE_PASSWORD}
-    keyPassword=${KEY_PASSWORD}
-    keyAlias=${ANDROID_KEY_ALIAS}
-    storeFile=${GITHUB_WORKSPACE}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
-    EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=${GITHUB_WORKSPACE}/arknights-story-reader/src-tauri/gen/android/upload-keystore.jks
+          EOF
   working-directory: arknights-story-reader
 ```
 
@@ -545,14 +552,19 @@ async function tryFetchAnnouncements(version: string): Promise<string | null> {
 }
 ```
 
-**公告文件格式：** `android-announcements.json`
+**公告文件格式：** `android-announcements.json`（项目根目录）
 
 ```json
 {
-  "1.10.26": "修复自动更新 ACL 权限问题；实现多路径下载兜底机制。",
-  "1.10.25": "优化更新检测流程；新增版本公告功能。"
+  "1.10.8": "本次为内部验证构建，修复更新检索稳定性；Android 仅发布 arm64 架构。",
+  "1.10.7": "优化自动更新流程；修复小概率签名校验失败。"
 }
 ```
+
+**说明：**
+- 文件位于项目根目录（与 `.github` 同级）
+- 键为版本号字符串，值为公告文本
+- 更新时只需添加新版本的条目即可
 
 ### 2. 多路径下载实现
 
@@ -1148,15 +1160,19 @@ tauri-plugin-process = "2"
 
 ⚠️ **不要添加 `app.capabilities` 或 `app.security.capabilities` 字段，会导致构建失败**
 
-#### 4. `android-announcements.json`（仓库根目录）
+#### 4. `android-announcements.json`（项目根目录）
 
 ```json
 {
-  "1.10.26": "修复文件下载名称问题；优化更新流程。",
-  "1.10.25": "新增多路径下载兜底机制。",
-  "1.10.24": "修复 ACL 权限配置。"
+  "1.10.8": "本次为内部验证构建，修复更新检索稳定性；Android 仅发布 arm64 架构。",
+  "1.10.7": "优化自动更新流程；修复小概率签名校验失败。"
 }
 ```
+
+**重要说明：**
+- 文件位于项目根目录（与 `.github/` 目录同级，不在 `arknights-story-reader/` 子目录）
+- 构建时通过 `https://raw.githubusercontent.com/{owner}/{repo}/release/android-announcements.json` 访问
+- 添加新版本公告只需在 JSON 中新增对应版本号的键值对
 
 ---
 
@@ -1417,16 +1433,21 @@ fi
 
 ### 更新公告
 
-编辑 `android-announcements.json`：
+编辑项目根目录的 `android-announcements.json`：
 
 ```json
 {
-  "1.10.27": "新功能：添加了 XXX；修复了 YYY。",
-  "1.10.26": "优化性能；修复已知问题。"
+  "1.10.28": "新功能：添加了 XXX；修复了 YYY。",
+  "1.10.27": "优化性能；修复已知问题。",
+  "1.10.8": "本次为内部验证构建，修复更新检索稳定性；Android 仅发布 arm64 架构。"
 }
 ```
 
-提交后下次发布会自动使用新公告。
+**注意：**
+- 文件在项目根目录（不是 `arknights-story-reader/` 子目录）
+- 提交后推送到 `release` 分支
+- 下次发布会自动使用新公告
+- 旧版本的公告保留，供历史版本查询使用
 
 ### 监控发布状态
 
