@@ -65,6 +65,12 @@ fi
 info "Building Android APK via Tauri (release profile)..."
 info "Target architecture: arm64-v8a only"
 
+# Ensure VITE_ANDROID_UPDATE_FEED is exported for Tauri's beforeBuildCommand
+if [ -n "$VITE_ANDROID_UPDATE_FEED" ]; then
+  info "Android update feed: $VITE_ANDROID_UPDATE_FEED"
+  export VITE_ANDROID_UPDATE_FEED
+fi
+
 # Clean up stale tauri plugin cache directories to avoid "File exists" conflicts
 CARGO_HOME="${CARGO_HOME:-$HOME/.cargo}"
 TAURI_CACHE_ROOT="$CARGO_HOME/registry/src"
