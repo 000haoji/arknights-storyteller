@@ -151,14 +151,12 @@ jobs:
             echo "storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks"
           } > src-tauri/gen/android/keystore.properties
 
-      - name: Prepare signing env
-        run: |
-          echo "ANDROID_KEYSTORE_PATH=${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks" >> "$GITHUB_ENV"
-          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> "$GITHUB_ENV"
-          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> "$GITHUB_ENV"
-          echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> "$GITHUB_ENV"
-
       - name: Build signed Android APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: bash scripts/build-apk.sh
 
       - name: Upload APK to release
