@@ -142,22 +142,21 @@ jobs:
         run: |
           mkdir -p src-tauri/gen/android
           echo "$ANDROID_KEYSTORE_B64" | base64 --decode > src-tauri/gen/android/upload-keystore.jks
-
           KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
-          printf '%s\n' \
-            "storePassword=${ANDROID_KEYSTORE_PASSWORD}" \
-            "keyPassword=${KEY_PASSWORD}" \
-            "keyAlias=${ANDROID_KEY_ALIAS}" \
-            "storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks" \
-            > src-tauri/gen/android/keystore.properties
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storePassword=${ANDROID_KEYSTORE_PASSWORD}
+          keyPassword=${KEY_PASSWORD}
+          keyAlias=${ANDROID_KEY_ALIAS}
+          storeFile=${WORKSPACE_PATH}/src-tauri/gen/android/upload-keystore.jks
+          EOF
 
       - name: Build signed Android APK
-        run: |
-          export ANDROID_KEYSTORE_PATH="${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks"
-          export ANDROID_KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS }}"
-          export ANDROID_KEYSTORE_PASSWORD="${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
-          export ANDROID_KEY_PASSWORD="${{ secrets.ANDROID_KEY_PASSWORD }}"
-          bash scripts/build-apk.sh
+        env:
+          ANDROID_KEYSTORE_PATH: "${{ github.workspace }}/src-tauri/gen/android/upload-keystore.jks"
+          ANDROID_KEY_ALIAS: "${{ secrets.ANDROID_KEY_ALIAS }}"
+          ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
+          ANDROID_KEY_PASSWORD: "${{ secrets.ANDROID_KEY_PASSWORD }}"
+        run: bash scripts/build-apk.sh
 
       - name: Upload APK to release
         env:
