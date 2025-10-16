@@ -1,0 +1,10 @@
+{
+  "identifier": "allow-download-and-install",
+  "description": "Enables the download_and_install command without any pre-configured scope.",
+  "commands": {
+    "allow": ["download_and_install"],
+    "deny": []
+  }
+}
+
+

@@ -5,7 +5,6 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "apk-updater:download-and-install",
-    "apk-updater:open-install-permission-settings"
+    "apk-updater:default"
   ]
 }
