@@ -14,7 +14,6 @@ import type {
   CharacterSkills,
   CharacterSkins,
   CharacterBuildingSkills,
-  CharacterAllData,
 } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
