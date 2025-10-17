@@ -439,6 +439,16 @@ pub struct SkillLevel {
     pub sp_data: SkillSPData,
     #[serde(rename = "duration")]
     pub duration: f32,
+    #[serde(rename = "blackboard")]
+    pub blackboard: Vec<BlackboardValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlackboardValue {
+    #[serde(rename = "key")]
+    pub key: String,
+    #[serde(rename = "value")]
+    pub value: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -553,4 +563,34 @@ pub struct BuildingSkillUnlockCondition {
     pub phase: String,
     #[serde(rename = "level")]
     pub level: i32,
+}
+
+// ==================== 新增：一次性获取所有干员数据 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterAllData {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "handbook")]
+    pub handbook: CharacterHandbook,
+    #[serde(rename = "voices")]
+    pub voices: CharacterVoice,
+    #[serde(rename = "equipment")]
+    pub equipment: CharacterEquipment,
+    #[serde(rename = "potentialToken")]
+    pub potential_token: Option<CharacterPotentialToken>,
+    #[serde(rename = "talents")]
+    pub talents: Option<CharacterTalents>,
+    #[serde(rename = "trait")]
+    pub trait_data: Option<CharacterTrait>,
+    #[serde(rename = "potentialRanks")]
+    pub potential_ranks: Option<CharacterPotentialRanks>,
+    #[serde(rename = "skills")]
+    pub skills: Option<CharacterSkills>,
+    #[serde(rename = "skins")]
+    pub skins: Option<CharacterSkins>,
+    #[serde(rename = "buildingSkills")]
+    pub building_skills: Option<CharacterBuildingSkills>,
 }

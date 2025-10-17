@@ -72,6 +72,7 @@ pub fn run() {
             commands::get_sub_profession_info,
             commands::get_team_power_info,
             commands::get_character_building_skills,
+            commands::get_character_all_data,
             commands::import_from_zip,
             commands::import_from_zip_bytes,
             commands::get_chapters,

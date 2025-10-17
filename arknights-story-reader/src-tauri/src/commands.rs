@@ -1,9 +1,10 @@
 use crate::data_service::DataService;
 use crate::models::{
-    Chapter, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment, CharacterHandbook,
-    CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins, CharacterSkills,
-    CharacterTalents, CharacterTrait, CharacterVoice, ParsedStoryContent, SearchDebugResponse,
-    SearchResult, StoryCategory, StoryEntry, StoryIndexStatus, SubProfessionInfo, TeamPowerInfo,
+    Chapter, CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
+    CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
+    CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, ParsedStoryContent,
+    SearchDebugResponse, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
+    SubProfessionInfo, TeamPowerInfo,
 };
 use crate::parser::parse_story_text;
 use serde::{Deserialize, Serialize};
@@ -392,6 +393,17 @@ pub async fn get_character_building_skills(
     tauri::async_runtime::spawn_blocking(move || service.get_character_building_skills(&char_id))
         .await
         .map_err(|err| format!("Failed to join character building skills task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_all_data(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterAllData, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_all_data(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character all data task: {}", err))?
 }
 
 // ==================== Android Update Methods (Multi-fallback) ====================

@@ -278,6 +278,12 @@ export interface SkillLevel {
   durationType: string;
   spData: SkillSPData;
   duration: number;
+  blackboard: BlackboardValue[];
+}
+
+export interface BlackboardValue {
+  key: string;
+  value: number;
 }
 
 export interface SkillSPData {
@@ -347,6 +353,23 @@ export interface BuildingSkillInfo {
 export interface BuildingSkillUnlockCondition {
   phase: string;
   level: number;
+}
+
+// ==================== 新增：一次性获取所有干员数据 ====================
+
+export interface CharacterAllData {
+  charId: string;
+  charName: string;
+  handbook: CharacterHandbook;
+  voices: CharacterVoice;
+  equipment: CharacterEquipment;
+  potentialToken?: CharacterPotentialToken;
+  talents?: CharacterTalents;
+  trait?: CharacterTrait;
+  potentialRanks?: CharacterPotentialRanks;
+  skills?: CharacterSkills;
+  skins?: CharacterSkins;
+  buildingSkills?: CharacterBuildingSkills;
 }
 
 // 搜索结果

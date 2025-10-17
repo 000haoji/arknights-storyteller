@@ -13,14 +13,14 @@ use unicode_normalization::UnicodeNormalization;
 use zip::ZipArchive;
 
 use crate::models::{
-    Activity, BuildingSkillInfo, BuildingSkillUnlockCondition, Chapter, CharacterBasicInfo,
-    CharacterBuildingSkills, CharacterEquipment, CharacterHandbook, CharacterPotentialRanks,
-    CharacterPotentialToken, CharacterSkins, CharacterSkills, CharacterTalents, CharacterTrait,
-    CharacterVoice, EquipmentInfo, HandbookStory, HandbookStorySection, PotentialRank,
-    SearchDebugResponse, SearchResult, SkinInfo, SkillInfo, SkillLevel, SkillSPData,
-    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, SubProfessionInfo, TalentCandidate,
-    TalentInfo, TalentUnlockCondition, TeamPowerInfo, TraitCandidate, TraitInfo,
-    TraitUnlockCondition, VoiceLine,
+    Activity, BlackboardValue, BuildingSkillInfo, BuildingSkillUnlockCondition, Chapter,
+    CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
+    CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
+    CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, EquipmentInfo,
+    HandbookStory, HandbookStorySection, PotentialRank, SearchDebugResponse, SearchResult,
+    SkinInfo, SkillInfo, SkillLevel, SkillSPData, StoryCategory, StoryEntry, StoryIndexStatus,
+    StorySegment, SubProfessionInfo, TalentCandidate, TalentInfo, TalentUnlockCondition,
+    TeamPowerInfo, TraitCandidate, TraitInfo, TraitUnlockCondition, VoiceLine,
 };
 use crate::parser::parse_story_text;
 
@@ -3570,6 +3570,17 @@ impl DataService {
                                     .enumerate()
                                     .filter_map(|(idx, level)| {
                                         let sp_data = level.get("spData")?;
+                                        let blackboard: Vec<BlackboardValue> = level.get("blackboard")
+                                            .and_then(|v| v.as_array())
+                                            .map(|bb| {
+                                                bb.iter().filter_map(|item| {
+                                                    Some(BlackboardValue {
+                                                        key: item.get("key").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                                        value: item.get("value").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                                                    })
+                                                }).collect()
+                                            })
+                                            .unwrap_or_default();
                                         Some(SkillLevel {
                                             level: (idx + 1) as i32,
                                             name: level
@@ -3614,6 +3625,7 @@ impl DataService {
                                                 .and_then(|v| v.as_f64())
                                                 .unwrap_or(0.0)
                                                 as f32,
+                                            blackboard,
                                         })
                                     })
                                     .collect()
@@ -3845,6 +3857,368 @@ impl DataService {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false),
         })
+    }
+
+    /// 一次性获取干员所有数据（优化版，避免重复读取文件）
+    pub fn get_character_all_data(&self, char_id: &str) -> Result<CharacterAllData, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        // 一次性读取所有需要的文件
+        let character_file = self.data_dir.join("zh_CN/gamedata/excel/character_table.json");
+        let handbook_file = self.data_dir.join("zh_CN/gamedata/excel/handbook_info_table.json");
+        let charword_file = self.data_dir.join("zh_CN/gamedata/excel/charword_table.json");
+        let uniequip_file = self.data_dir.join("zh_CN/gamedata/excel/uniequip_table.json");
+        let item_file = self.data_dir.join("zh_CN/gamedata/excel/item_table.json");
+        let skill_file = self.data_dir.join("zh_CN/gamedata/excel/skill_table.json");
+        let skin_file = self.data_dir.join("zh_CN/gamedata/excel/skin_table.json");
+        let building_file = self.data_dir.join("zh_CN/gamedata/excel/building_data.json");
+
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let handbook_content = fs::read_to_string(&handbook_file)
+            .map_err(|e| format!("Failed to read handbook table: {}", e))?;
+        let charword_content = fs::read_to_string(&charword_file)
+            .map_err(|e| format!("Failed to read charword table: {}", e))?;
+        let uniequip_content = fs::read_to_string(&uniequip_file)
+            .map_err(|e| format!("Failed to read uniequip table: {}", e))?;
+        let item_content = fs::read_to_string(&item_file)
+            .map_err(|e| format!("Failed to read item table: {}", e))?;
+        let skill_content = fs::read_to_string(&skill_file)
+            .map_err(|e| format!("Failed to read skill table: {}", e))?;
+        let skin_content = fs::read_to_string(&skin_file)
+            .map_err(|e| format!("Failed to read skin table: {}", e))?;
+        let building_content = fs::read_to_string(&building_file)
+            .map_err(|e| format!("Failed to read building data: {}", e))?;
+
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+        let handbook_table: Value = serde_json::from_str(&handbook_content)
+            .map_err(|e| format!("Failed to parse handbook table: {}", e))?;
+        let charword_table: Value = serde_json::from_str(&charword_content)
+            .map_err(|e| format!("Failed to parse charword table: {}", e))?;
+        let uniequip_table: Value = serde_json::from_str(&uniequip_content)
+            .map_err(|e| format!("Failed to parse uniequip table: {}", e))?;
+        let item_table: Value = serde_json::from_str(&item_content)
+            .map_err(|e| format!("Failed to parse item table: {}", e))?;
+        let skill_table: Value = serde_json::from_str(&skill_content)
+            .map_err(|e| format!("Failed to parse skill table: {}", e))?;
+        let skin_table: Value = serde_json::from_str(&skin_content)
+            .map_err(|e| format!("Failed to parse skin table: {}", e))?;
+        let building_table: Value = serde_json::from_str(&building_content)
+            .map_err(|e| format!("Failed to parse building table: {}", e))?;
+
+        let char_data = char_table.get(char_id).ok_or("Character not found")?;
+        let char_name = char_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        // 解析各部分数据（复用内部逻辑）
+        let handbook = self.parse_handbook_from_tables(char_id, &handbook_table, &char_table)?;
+        let voices = self.parse_voices_from_tables(char_id, &charword_table, &char_table)?;
+        let equipment = self.parse_equipment_from_tables(char_id, &uniequip_table, &char_table)?;
+        let potential_token = self.parse_potential_token_from_tables(char_id, &item_table, &char_table).ok();
+        let talents = self.parse_talents_from_table(char_id, &char_table).ok();
+        let trait_data = self.parse_trait_from_table(char_id, &char_table).ok();
+        let potential_ranks = self.parse_potential_ranks_from_table(char_id, &char_table).ok();
+        let skills = self.parse_skills_from_tables(char_id, &char_table, &skill_table).ok();
+        let skins = self.parse_skins_from_tables(char_id, &char_table, &skin_table).ok();
+        let building_skills = self.parse_building_skills_from_tables(char_id, &char_table, &building_table).ok();
+
+        Ok(CharacterAllData {
+            char_id: char_id.to_string(),
+            char_name,
+            handbook,
+            voices,
+            equipment,
+            potential_token,
+            talents,
+            trait_data,
+            potential_ranks,
+            skills,
+            skins,
+            building_skills,
+        })
+    }
+
+    // 内部辅助方法 - 从已加载的表中解析数据
+    fn parse_handbook_from_tables(&self, char_id: &str, handbook_table: &Value, char_table: &Value) -> Result<CharacterHandbook, String> {
+        let handbook_dict = handbook_table.get("handbookDict").and_then(|v| v.as_object()).ok_or("handbookDict not found")?;
+        let char_data = handbook_dict.get(char_id).ok_or("Character not found in handbook")?;
+        
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let rarity = char_table.get(char_id).and_then(|v| v.get("rarity")).and_then(|v| v.as_i64()).unwrap_or(0) as i32;
+        let profession = char_table.get(char_id).and_then(|v| v.get("profession")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let sub_profession = char_table.get(char_id).and_then(|v| v.get("subProfessionId")).and_then(|v| v.as_str()).map(|s| s.to_string());
+
+        let story_sections: Vec<HandbookStorySection> = char_data.get("storyTextAudio").and_then(|v| v.as_array()).map(|sections| {
+            sections.iter().filter_map(|section| {
+                let title = section.get("storyTitle").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let stories: Vec<HandbookStory> = section.get("stories").and_then(|v| v.as_array()).map(|stories_arr| {
+                    stories_arr.iter().filter_map(|story| {
+                        Some(HandbookStory {
+                            story_text: story.get("storyText").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            unlock_type: story.get("unLockType").and_then(|v| v.as_str()).unwrap_or("DIRECT").to_string(),
+                            unlock_param: story.get("unLockParam").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        })
+                    }).collect()
+                }).unwrap_or_default();
+
+                if title.is_empty() || stories.is_empty() { None } else { Some(HandbookStorySection { story_title: title, stories }) }
+            }).collect()
+        }).unwrap_or_default();
+
+        Ok(CharacterHandbook { char_id: char_id.to_string(), char_name, rarity, profession, sub_profession, story_sections })
+    }
+
+    fn parse_voices_from_tables(&self, char_id: &str, charword_table: &Value, char_table: &Value) -> Result<CharacterVoice, String> {
+        let char_words = charword_table.get("charWords").and_then(|v| v.as_object()).ok_or("charWords not found")?;
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        
+        let voices: Vec<VoiceLine> = char_words.iter().filter_map(|(_, voice_data)| {
+            if voice_data.get("charId").and_then(|v| v.as_str()) == Some(char_id) {
+                Some(VoiceLine {
+                    voice_id: voice_data.get("voiceId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    voice_title: voice_data.get("voiceTitle").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    voice_text: voice_data.get("voiceText").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    voice_index: voice_data.get("voiceIndex").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                    unlock_type: voice_data.get("unlockType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                })
+            } else { None }
+        }).collect();
+
+        Ok(CharacterVoice { char_id: char_id.to_string(), char_name, voices })
+    }
+
+    fn parse_equipment_from_tables(&self, char_id: &str, uniequip_table: &Value, char_table: &Value) -> Result<CharacterEquipment, String> {
+        let char_equip = uniequip_table.get("charEquip").and_then(|v| v.as_object()).ok_or("charEquip not found")?;
+        let equip_dict = uniequip_table.get("equipDict").and_then(|v| v.as_object()).ok_or("equipDict not found")?;
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let mut equipments = Vec::new();
+        if let Some(equip_ids) = char_equip.get(char_id).and_then(|v| v.as_array()) {
+            for equip_id_value in equip_ids {
+                if let Some(equip_id) = equip_id_value.as_str() {
+                    if let Some(equip_data) = equip_dict.get(equip_id) {
+                        equipments.push(EquipmentInfo {
+                            equip_id: equip_id.to_string(),
+                            equip_name: equip_data.get("uniEquipName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            equip_desc: equip_data.get("uniEquipDesc").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            equip_shining_color: equip_data.get("equipShiningColor").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            type_name: equip_data.get("typeName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterEquipment { char_id: char_id.to_string(), char_name, equipments })
+    }
+
+    fn parse_potential_token_from_tables(&self, char_id: &str, item_table: &Value, char_table: &Value) -> Result<CharacterPotentialToken, String> {
+        let items = item_table.get("items").and_then(|v| v.as_object()).ok_or("items not found")?;
+        let token_id = format!("p_{}", char_id);
+        let token_data = items.get(&token_id).ok_or("Token not found")?;
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        Ok(CharacterPotentialToken {
+            char_id: char_id.to_string(),
+            char_name,
+            item_id: token_id,
+            token_name: token_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            token_desc: token_data.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            token_usage: token_data.get("usage").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            rarity: token_data.get("rarity").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            obtain_approach: token_data.get("obtainApproach").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        })
+    }
+
+    fn parse_talents_from_table(&self, char_id: &str, char_table: &Value) -> Result<CharacterTalents, String> {
+        let char_data = char_table.get(char_id).ok_or("Character not found")?;
+        let char_name = char_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let talents: Vec<TalentInfo> = char_data.get("talents").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter().enumerate().filter_map(|(idx, talent)| {
+                let candidates: Vec<TalentCandidate> = talent.get("candidates").and_then(|v| v.as_array()).map(|cands| {
+                    cands.iter().filter_map(|cand| {
+                        Some(TalentCandidate {
+                            unlock_condition: TalentUnlockCondition {
+                                phase: cand.get("unlockCondition").and_then(|v| v.get("phase")).and_then(|v| v.as_str()).unwrap_or("PHASE_0").to_string(),
+                                level: cand.get("unlockCondition").and_then(|v| v.get("level")).and_then(|v| v.as_i64()).unwrap_or(1) as i32,
+                            },
+                            name: cand.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            description: cand.get("description").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                            range_description: cand.get("rangeDescription").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        })
+                    }).collect()
+                }).unwrap_or_default();
+
+                if candidates.is_empty() { None } else { Some(TalentInfo { talent_index: idx as i32, candidates }) }
+            }).collect()
+        }).unwrap_or_default();
+
+        Ok(CharacterTalents { char_id: char_id.to_string(), char_name, talents })
+    }
+
+    fn parse_trait_from_table(&self, char_id: &str, char_table: &Value) -> Result<CharacterTrait, String> {
+        let char_data = char_table.get(char_id).ok_or("Character not found")?;
+        let char_name = char_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let trait_info = char_data.get("trait").and_then(|trait_data| {
+            let candidates: Vec<TraitCandidate> = trait_data.get("candidates").and_then(|v| v.as_array()).map(|cands| {
+                cands.iter().filter_map(|cand| {
+                    Some(TraitCandidate {
+                        unlock_condition: TraitUnlockCondition {
+                            phase: cand.get("unlockCondition").and_then(|v| v.get("phase")).and_then(|v| v.as_str()).unwrap_or("PHASE_0").to_string(),
+                            level: cand.get("unlockCondition").and_then(|v| v.get("level")).and_then(|v| v.as_i64()).unwrap_or(1) as i32,
+                        },
+                        override_descripton: cand.get("overrideDescripton").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    })
+                }).collect()
+            }).unwrap_or_default();
+
+            if candidates.is_empty() { None } else { Some(TraitInfo { candidates }) }
+        });
+
+        Ok(CharacterTrait { char_id: char_id.to_string(), char_name, trait_info })
+    }
+
+    fn parse_potential_ranks_from_table(&self, char_id: &str, char_table: &Value) -> Result<CharacterPotentialRanks, String> {
+        let char_data = char_table.get(char_id).ok_or("Character not found")?;
+        let char_name = char_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let potential_ranks: Vec<PotentialRank> = char_data.get("potentialRanks").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter().enumerate().filter_map(|(idx, rank)| {
+                Some(PotentialRank {
+                    rank: idx as i32,
+                    description: rank.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                })
+            }).collect()
+        }).unwrap_or_default();
+
+        Ok(CharacterPotentialRanks { char_id: char_id.to_string(), char_name, potential_ranks })
+    }
+
+    fn parse_skills_from_tables(&self, char_id: &str, char_table: &Value, skill_table: &Value) -> Result<CharacterSkills, String> {
+        let char_data = char_table.get(char_id).ok_or("Character not found")?;
+        let char_name = char_data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        let mut skills = Vec::new();
+        if let Some(skill_arr) = char_data.get("skills").and_then(|v| v.as_array()) {
+            for skill_ref in skill_arr {
+                if let Some(skill_id) = skill_ref.get("skillId").and_then(|v| v.as_str()) {
+                    if let Some(skill_data) = skill_table.get(skill_id) {
+                        let levels: Vec<SkillLevel> = skill_data.get("levels").and_then(|v| v.as_array()).map(|arr| {
+                            arr.iter().enumerate().filter_map(|(idx, level)| {
+                                let sp_data = level.get("spData")?;
+                                let blackboard: Vec<BlackboardValue> = level.get("blackboard")
+                                    .and_then(|v| v.as_array())
+                                    .map(|bb| {
+                                        bb.iter().filter_map(|item| {
+                                            Some(BlackboardValue {
+                                                key: item.get("key").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                                value: item.get("value").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                                            })
+                                        }).collect()
+                                    })
+                                    .unwrap_or_default();
+                                Some(SkillLevel {
+                                    level: (idx + 1) as i32,
+                                    name: level.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    description: level.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    skill_type: level.get("skillType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    duration_type: level.get("durationType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    sp_data: SkillSPData {
+                                        sp_type: sp_data.get("spType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                        sp_cost: sp_data.get("spCost").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                                        init_sp: sp_data.get("initSp").and_then(|v| v.as_i64()).unwrap_or(0) as i32,
+                                    },
+                                    duration: level.get("duration").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                                    blackboard,
+                                })
+                            }).collect()
+                        }).unwrap_or_default();
+
+                        if !levels.is_empty() {
+                            skills.push(SkillInfo {
+                                skill_id: skill_id.to_string(),
+                                icon_id: skill_data.get("iconId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                levels,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterSkills { char_id: char_id.to_string(), char_name, skills })
+    }
+
+    fn parse_skins_from_tables(&self, char_id: &str, char_table: &Value, skin_table: &Value) -> Result<CharacterSkins, String> {
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let char_skins_obj = skin_table.get("charSkins").and_then(|v| v.as_object()).ok_or("charSkins not found")?;
+
+        let mut skins = Vec::new();
+        for (skin_id, skin_data) in char_skins_obj.iter() {
+            if skin_data.get("charId").and_then(|v| v.as_str()) == Some(char_id) {
+                let display_skin = skin_data.get("displaySkin");
+                let drawer_list: Vec<String> = display_skin.and_then(|ds| ds.get("drawerList")).and_then(|v| v.as_array()).map(|arr| {
+                    arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+                }).unwrap_or_default();
+
+                skins.push(SkinInfo {
+                    skin_id: skin_id.clone(),
+                    skin_name: display_skin.and_then(|ds| ds.get("skinName")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(|s| s.to_string()),
+                    illust_id: skin_data.get("illustId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    avatar_id: skin_data.get("avatarId").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                    portrait_id: skin_data.get("portraitId").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    is_buy_skin: skin_data.get("isBuySkin").and_then(|v| v.as_bool()).unwrap_or(false),
+                    skin_group_name: display_skin.and_then(|ds| ds.get("skinGroupName")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    content: display_skin.and_then(|ds| ds.get("content")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    dialog: display_skin.and_then(|ds| ds.get("dialog")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    usage: display_skin.and_then(|ds| ds.get("usage")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    description: display_skin.and_then(|ds| ds.get("description")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    obtain_approach: display_skin.and_then(|ds| ds.get("obtainApproach")).and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    drawer_list,
+                });
+            }
+        }
+
+        skins.sort_by(|a, b| a.skin_id.cmp(&b.skin_id));
+        Ok(CharacterSkins { char_id: char_id.to_string(), char_name, skins })
+    }
+
+    fn parse_building_skills_from_tables(&self, char_id: &str, char_table: &Value, building_table: &Value) -> Result<CharacterBuildingSkills, String> {
+        let char_name = char_table.get(char_id).and_then(|v| v.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let chars = building_table.get("chars").and_then(|v| v.as_object()).ok_or("chars not found")?;
+        let buffs = building_table.get("buffs").and_then(|v| v.as_object()).ok_or("buffs not found")?;
+        let char_building_data = chars.get(char_id).ok_or("Character not found in building data")?;
+
+        let mut building_skills = Vec::new();
+        if let Some(buff_char) = char_building_data.get("buffChar").and_then(|v| v.as_array()) {
+            for buff_phase in buff_char {
+                if let Some(buff_data_arr) = buff_phase.get("buffData").and_then(|v| v.as_array()) {
+                    for buff_ref in buff_data_arr {
+                        if let Some(buff_id) = buff_ref.get("buffId").and_then(|v| v.as_str()) {
+                            if let Some(buff_info) = buffs.get(buff_id) {
+                                let unlock_cond = buff_ref.get("cond");
+                                building_skills.push(BuildingSkillInfo {
+                                    buff_id: buff_id.to_string(),
+                                    buff_name: buff_info.get("buffName").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    description: buff_info.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    room_type: buff_info.get("roomType").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                                    unlock_condition: BuildingSkillUnlockCondition {
+                                        phase: unlock_cond.and_then(|v| v.get("phase")).and_then(|v| v.as_str()).unwrap_or("PHASE_0").to_string(),
+                                        level: unlock_cond.and_then(|v| v.get("level")).and_then(|v| v.as_i64()).unwrap_or(1) as i32,
+                                    },
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterBuildingSkills { char_id: char_id.to_string(), char_name, building_skills })
     }
 
     /// 获取干员基建技能

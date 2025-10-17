@@ -21,6 +21,7 @@ import type {
   SubProfessionInfo,
   TeamPowerInfo,
   CharacterBuildingSkills,
+  CharacterAllData,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -285,5 +286,11 @@ export const api = {
   getCharacterBuildingSkills: async (charId: string): Promise<CharacterBuildingSkills> => {
     console.log("[API] 调用 get_character_building_skills, charId:", charId);
     return invoke("get_character_building_skills", { charId });
+  },
+
+  // 一次性获取干员所有数据（优化版）
+  getCharacterAllData: async (charId: string): Promise<CharacterAllData> => {
+    console.log("[API] 调用 get_character_all_data (优化版), charId:", charId);
+    return invoke("get_character_all_data", { charId });
   },
 };

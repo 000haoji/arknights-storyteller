@@ -14,6 +14,7 @@ import type {
   CharacterSkills,
   CharacterSkins,
   CharacterBuildingSkills,
+  CharacterAllData,
 } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
@@ -22,6 +23,7 @@ import { Collapsible } from "@/components/ui/collapsible";
 import { ArrowLeft, Loader2, BookOpen, Mic, Star, Package, Award, Zap, Sparkles, Palette, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFavoriteCharacters } from "@/hooks/useFavoriteCharacters";
+import { GameText } from "@/lib/gameTagRenderer";
 
 interface CharactersPanelProps {
   onOpenStory: (story: StoryEntry, character: string) => void;
@@ -278,43 +280,21 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     }
   }, [charactersLoading, characters.length]);
 
-  // 加载指定干员的所有数据
+  // 加载指定干员的所有数据（优化版：一次API调用）
   const loadCharacterData = useCallback(async (charId: string) => {
     setHandbookLoading(true);
     try {
-      const [
-        handbookData,
-        voicesData,
-        equipmentData,
-        potentialTokenData,
-        talentsData,
-        traitData,
-        potentialRanksData,
-        skillsData,
-        skinsData,
-        buildingSkillsData,
-      ] = await Promise.all([
-        api.getCharacterHandbook(charId),
-        api.getCharacterVoices(charId),
-        api.getCharacterEquipment(charId),
-        api.getCharacterPotentialToken(charId).catch(() => null),
-        api.getCharacterTalents(charId).catch(() => null),
-        api.getCharacterTrait(charId).catch(() => null),
-        api.getCharacterPotentialRanks(charId).catch(() => null),
-        api.getCharacterSkills(charId).catch(() => null),
-        api.getCharacterSkins(charId).catch(() => null),
-        api.getCharacterBuildingSkills(charId).catch(() => null),
-      ]);
-      setHandbook(handbookData);
-      setVoices(voicesData);
-      setEquipment(equipmentData);
-      setPotentialToken(potentialTokenData);
-      setTalents(talentsData);
-      setTrait(traitData);
-      setPotentialRanks(potentialRanksData);
-      setSkills(skillsData);
-      setSkins(skinsData);
-      setBuildingSkills(buildingSkillsData);
+      const allData = await api.getCharacterAllData(charId);
+      setHandbook(allData.handbook);
+      setVoices(allData.voices);
+      setEquipment(allData.equipment);
+      setPotentialToken(allData.potentialToken || null);
+      setTalents(allData.talents || null);
+      setTrait(allData.trait || null);
+      setPotentialRanks(allData.potentialRanks || null);
+      setSkills(allData.skills || null);
+      setSkins(allData.skins || null);
+      setBuildingSkills(allData.buildingSkills || null);
     } catch (err) {
       console.error("[CharactersPanel] 加载干员数据失败:", err);
     } finally {
@@ -890,7 +870,7 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                                           </div>
                                           {cand.description && (
                                             <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
-                                              {cand.description}
+                                              <GameText text={cand.description} />
                                             </div>
                                           )}
                                         </div>
@@ -918,7 +898,9 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                                       </div>
                                     </div>
                                     {cand.overrideDescripton && (
-                                      <div className="text-sm">{cand.overrideDescripton}</div>
+                                      <div className="text-sm">
+                                        <GameText text={cand.overrideDescripton} />
+                                      </div>
                                     )}
                                   </div>
                                 ))}
@@ -966,7 +948,7 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                                         </div>
                                       </div>
                                       <div className="text-sm text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap leading-relaxed">
-                                        {level.description}
+                                        <GameText text={level.description} blackboard={level.blackboard} />
                                       </div>
                                       <div className="mt-3 pt-3 border-t border-[hsl(var(--color-border))]">
                                         <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
@@ -1076,7 +1058,7 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                                   </div>
                                 </div>
                                 <div className="text-sm text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap leading-relaxed">
-                                  {skill.description}
+                                  <GameText text={skill.description} />
                                 </div>
                               </div>
                             ))
