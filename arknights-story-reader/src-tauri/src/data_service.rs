@@ -13,9 +13,14 @@ use unicode_normalization::UnicodeNormalization;
 use zip::ZipArchive;
 
 use crate::models::{
-    Activity, Chapter, CharacterBasicInfo, CharacterEquipment, CharacterHandbook, CharacterVoice,
-    EquipmentInfo, HandbookStory, HandbookStorySection, SearchDebugResponse, SearchResult,
-    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, VoiceLine,
+    Activity, BuildingSkillInfo, BuildingSkillUnlockCondition, Chapter, CharacterBasicInfo,
+    CharacterBuildingSkills, CharacterEquipment, CharacterHandbook, CharacterPotentialRanks,
+    CharacterPotentialToken, CharacterSkins, CharacterSkills, CharacterTalents, CharacterTrait,
+    CharacterVoice, EquipmentInfo, HandbookStory, HandbookStorySection, PotentialRank,
+    SearchDebugResponse, SearchResult, SkinInfo, SkillInfo, SkillLevel, SkillSPData,
+    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, SubProfessionInfo, TalentCandidate,
+    TalentInfo, TalentUnlockCondition, TeamPowerInfo, TraitCandidate, TraitInfo,
+    TraitUnlockCondition, VoiceLine,
 };
 use crate::parser::parse_story_text;
 
@@ -351,6 +356,8 @@ impl DataService {
             "ROGUELIKE" => "肉鸽".to_string(),
             "SIDESTORY" => "支线".to_string(),
             "NONE" => "干员密录".to_string(),
+            "RECORD" => "主线笔记".to_string(),
+            "RUNE" => "危机合约".to_string(),
             _ => entry_type.to_string(),
         }
     }
@@ -429,8 +436,91 @@ impl DataService {
             }
         }
 
+        self.extend_index_with_additional_sources(&mut stories, &mut seen_ids);
+
         stories.sort_by(|a, b| a.story.story_id.cmp(&b.story.story_id));
         Ok(stories)
+    }
+
+    fn extend_index_with_additional_sources(
+        &self,
+        stories: &mut Vec<IndexedStory>,
+        seen_ids: &mut HashSet<String>,
+    ) {
+        match self.get_roguelike_stories_grouped() {
+            Ok(groups) => {
+                for (group_name, entries) in groups {
+                    let category_name = if group_name.trim().is_empty() {
+                        "肉鸽".to_string()
+                    } else {
+                        group_name.clone()
+                    };
+                    for story in entries {
+                        if story.story_txt.trim().is_empty() {
+                            continue;
+                        }
+                        if seen_ids.insert(story.story_id.clone()) {
+                            stories.push(IndexedStory {
+                                category_name: category_name.clone(),
+                                entry_type: "ROGUELIKE".to_string(),
+                                story,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("[INDEX] Skip roguelike stories: {}", err);
+            }
+        }
+
+        match self.get_record_stories_grouped() {
+            Ok(groups) => {
+                for (chapter_name, entries) in groups {
+                    let category_name = if chapter_name.trim().is_empty() {
+                        "主线笔记".to_string()
+                    } else {
+                        chapter_name.clone()
+                    };
+                    for story in entries {
+                        if story.story_txt.trim().is_empty() {
+                            continue;
+                        }
+                        if seen_ids.insert(story.story_id.clone()) {
+                            stories.push(IndexedStory {
+                                category_name: category_name.clone(),
+                                entry_type: "RECORD".to_string(),
+                                story,
+                            });
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("[INDEX] Skip record stories: {}", err);
+            }
+        }
+
+        match self.get_rune_stories() {
+            Ok(entries) => {
+                let category_name = "危机合约".to_string();
+                for story in entries {
+                    if story.story_txt.trim().is_empty() {
+                        continue;
+                    }
+                    if seen_ids.insert(story.story_id.clone()) {
+                        stories.push(IndexedStory {
+                            category_name: category_name.clone(),
+                            entry_type: "RUNE".to_string(),
+                            story,
+                        });
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("[INDEX] Skip rune stories: {}", err);
+            }
+        }
     }
 
     fn flatten_segments(segments: &[StorySegment]) -> String {
@@ -1227,7 +1317,7 @@ impl DataService {
     /// 读取剧情文本
     pub fn read_story_text(&self, story_path: &str) -> Result<String, String> {
         let base_dir = self.data_dir.join("zh_CN/gamedata/story");
-        
+
         // 首先检查是否为目录（月度聊天类型）
         let dir_path = base_dir.join(story_path);
         if dir_path.is_dir() {
@@ -1241,31 +1331,31 @@ impl DataService {
                     }
                 }
             }
-            
+
             // 排序文件（按 _1, _2, _3 等顺序）
             story_files.sort();
-            
+
             if story_files.is_empty() {
                 return Err(format!("No story files found in directory: {}", story_path));
             }
-            
+
             // 按顺序读取并拼接所有文件
             let mut combined_content = String::new();
             for (idx, file_name) in story_files.iter().enumerate() {
                 let file_path = dir_path.join(file_name);
                 let content = fs::read_to_string(&file_path)
                     .map_err(|e| format!("Failed to read story file {}: {}", file_name, e))?;
-                
+
                 if idx > 0 {
                     // 在文件之间添加分隔符（保持剧情连续性）
                     combined_content.push_str("\n\n");
                 }
                 combined_content.push_str(&content);
             }
-            
+
             return Ok(combined_content);
         }
-        
+
         // 如果不是目录，按原逻辑读取单个文件
         let full_path = base_dir.join(format!("{}.txt", story_path));
         fs::read_to_string(&full_path).map_err(|e| format!("Failed to read story file: {}", e))
@@ -2056,7 +2146,7 @@ impl DataService {
             .map_err(|e| format!("Failed to parse story review meta data: {}", e))?;
 
         let mut path_desc_map: HashMap<String, String> = HashMap::new();
-        
+
         // 从 meta 中收集 contentPath 映射
         fn collect_content_paths(map: &mut HashMap<String, String>, val: &Value) {
             match val {
@@ -2145,7 +2235,10 @@ impl DataService {
 
                     if let Some(path) = story_path {
                         let lower = path.to_ascii_lowercase();
-                        if lower.starts_with("obt/rogue/") || lower.starts_with("obt/roguelike/") || lower.starts_with("month_chat_rogue_") {
+                        if lower.starts_with("obt/rogue/")
+                            || lower.starts_with("obt/roguelike/")
+                            || lower.starts_with("month_chat_rogue_")
+                        {
                             story_data.push((path.clone(), title.clone()));
                             // 同时更新映射表
                             if let Some(t) = &title {
@@ -2172,19 +2265,23 @@ impl DataService {
 
         // 从 roguelike_topic_table 中提取剧情数据
         let mut roguelike_story_data = Vec::new();
-        extract_story_data_from_value(&roguelike_topic_value, &mut roguelike_story_data, &mut path_desc_map);
+        extract_story_data_from_value(
+            &roguelike_topic_value,
+            &mut roguelike_story_data,
+            &mut path_desc_map,
+        );
 
         // 辅助函数：为给定路径查找最佳匹配的标题
-        // 例如 "obt/rogue/month_chat_rogue_1_1/month_chat_rogue_1_1_1.txt" 
+        // 例如 "obt/rogue/month_chat_rogue_1_1/month_chat_rogue_1_1_1.txt"
         // 应该能找到 "month_chat_rogue_1_1" 的标题
         let find_title_for_path = |path: &str, map: &HashMap<String, String>| -> Option<String> {
             let lower = path.to_ascii_lowercase();
-            
+
             // 首先尝试精确匹配
             if let Some(title) = map.get(&lower) {
                 return Some(title.clone());
             }
-            
+
             // 对于 month_chat 类型的路径，尝试查找父级标题
             // 例如 "obt/rogue/month_chat_rogue_1_1/month_chat_rogue_1_1_1.txt" -> "month_chat_rogue_1_1"
             if lower.contains("month_chat_rogue_") {
@@ -2196,7 +2293,7 @@ impl DataService {
                     }
                 }
             }
-            
+
             None
         };
 
@@ -2207,12 +2304,12 @@ impl DataService {
             if !lower.starts_with("obt/roguelike/") && !lower.starts_with("obt/rogue/") {
                 continue;
             }
-            
+
             // 跳过月度聊天的分片文件（这些会在后面的文件系统扫描中作为合并条目添加）
             if lower.contains("/month_chat_rogue_") {
                 continue;
             }
-            
+
             // 智能提取分组键
             // obt/roguelike/ro1/... -> RO1
             // obt/rogue/month_chat_rogue_1_1/... -> MONTH_CHAT_ROGUE_1
@@ -2244,7 +2341,7 @@ impl DataService {
                     "ROGUE".to_string()
                 }
             };
-            
+
             let sort = counters
                 .entry(group_key.clone())
                 .and_modify(|x| *x += 1)
@@ -2281,12 +2378,12 @@ impl DataService {
         // 处理 roguelike_topic_table 中提取的剧情数据
         for (story_id, explicit_title) in roguelike_story_data {
             let lower = story_id.to_ascii_lowercase();
-            
+
             // 跳过月度聊天的分片文件（这些会在后面的文件系统扫描中作为合并条目添加）
             if lower.contains("/month_chat_rogue_") || lower.starts_with("month_chat_rogue_") {
                 continue;
             }
-            
+
             // 智能提取分组键（同样的逻辑）
             let group_key = if lower.starts_with("obt/roguelike/") {
                 lower
@@ -2310,19 +2407,17 @@ impl DataService {
                     "ROGUE".to_string()
                 }
             };
-            
+
             let sort = counters
                 .entry(group_key.clone())
                 .and_modify(|x| *x += 1)
                 .or_insert(1);
-            
+
             // 优先使用显式标题，否则查找映射（包括父级标题），最后回退到文件名
             let name = explicit_title
                 .filter(|s| !s.trim().is_empty())
                 .or_else(|| find_title_for_path(&story_id, &path_desc_map))
-                .unwrap_or_else(|| {
-                    story_id.split('/').last().unwrap_or(&story_id).to_string()
-                });
+                .unwrap_or_else(|| story_id.split('/').last().unwrap_or(&story_id).to_string());
 
             let entry = StoryEntry {
                 story_id: story_id.clone(),
@@ -2358,7 +2453,7 @@ impl DataService {
                     if !dir_name.starts_with("month_chat_rogue_") {
                         continue;
                     }
-                    
+
                     // 收集该目录下的所有 .txt 文件并排序
                     let mut story_files = Vec::new();
                     if let Ok(files) = fs::read_dir(entry.path()) {
@@ -2369,38 +2464,41 @@ impl DataService {
                             }
                         }
                     }
-                    
+
                     // 排序文件（按 _1, _2, _3 等顺序）
                     story_files.sort();
-                    
+
                     if story_files.is_empty() {
                         continue;
                     }
-                    
+
                     // 使用第一个文件构造基础路径来查找标题
-                    let base_story_id = format!("Obt/Rogue/{}/{}", dir_name, story_files[0].trim_end_matches(".txt"));
-                    
+                    let base_story_id = format!(
+                        "Obt/Rogue/{}/{}",
+                        dir_name,
+                        story_files[0].trim_end_matches(".txt")
+                    );
+
                     // 提取分组键
                     let group_key = {
                         let prefix = dir_name.rsplitn(2, '_').nth(1).unwrap_or(&dir_name);
                         prefix.to_uppercase()
                     };
-                    
+
                     let sort = counters
                         .entry(group_key.clone())
                         .and_modify(|x| *x += 1)
                         .or_insert(1);
-                    
+
                     // 查找标题（使用目录名或第一个文件）
-                    let name = find_title_for_path(&base_story_id, &path_desc_map).unwrap_or_else(|| {
-                        dir_name.clone()
-                    });
-                    
+                    let name = find_title_for_path(&base_story_id, &path_desc_map)
+                        .unwrap_or_else(|| dir_name.clone());
+
                     // 创建一个合并的 story_id，包含所有部分
                     // 格式：Obt/Rogue/month_chat_rogue_1_1 (将在读取时自动拼接所有部分)
                     let merged_story_id = format!("Obt/Rogue/{}", dir_name);
                     let lower = merged_story_id.to_ascii_lowercase();
-                    
+
                     let entry = StoryEntry {
                         story_id: merged_story_id.clone(),
                         story_name: name,
@@ -2421,7 +2519,7 @@ impl DataService {
                         cost_item_id: None,
                         cost_item_count: None,
                     };
-                    
+
                     grouped.entry(group_key).or_default().push(entry);
                 }
             }
@@ -2463,9 +2561,7 @@ impl DataService {
             return Err("NOT_INSTALLED".to_string());
         }
 
-        let zone_table_file = self
-            .data_dir
-            .join("zh_CN/gamedata/excel/zone_table.json");
+        let zone_table_file = self.data_dir.join("zh_CN/gamedata/excel/zone_table.json");
 
         let content = fs::read_to_string(&zone_table_file)
             .map_err(|e| format!("Failed to read zone table file: {}", e))?;
@@ -2507,8 +2603,14 @@ impl DataService {
             let chapter_name = zones
                 .get(zone_id)
                 .and_then(|z| {
-                    let first = z.get("zoneNameFirst").and_then(|v| v.as_str()).unwrap_or("");
-                    let second = z.get("zoneNameSecond").and_then(|v| v.as_str()).unwrap_or("");
+                    let first = z
+                        .get("zoneNameFirst")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let second = z
+                        .get("zoneNameSecond")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
                     if first.is_empty() && second.is_empty() {
                         None
                     } else if second.is_empty() {
@@ -2545,9 +2647,7 @@ impl DataService {
                             };
 
                             // 转换路径：Obt/Record/... -> obt/record/...
-                            let normalized_path = text_path
-                                .replace('\\', "/")
-                                .to_ascii_lowercase();
+                            let normalized_path = text_path.replace('\\', "/").to_ascii_lowercase();
 
                             let entry = StoryEntry {
                                 story_id: format!("{}_{}", zone_id, record_id),
@@ -2604,8 +2704,8 @@ impl DataService {
         let mut stories = Vec::new();
 
         // 扫描 rune 目录
-        let entries = fs::read_dir(&rune_dir)
-            .map_err(|e| format!("Failed to read rune directory: {}", e))?;
+        let entries =
+            fs::read_dir(&rune_dir).map_err(|e| format!("Failed to read rune directory: {}", e))?;
 
         for entry in entries {
             let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
@@ -2625,7 +2725,9 @@ impl DataService {
 
                 let story_txt = format!(
                     "obt/rune/{}",
-                    path.file_name().and_then(|s| s.to_str()).unwrap_or(file_name)
+                    path.file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(file_name)
                 )
                 .replace(".txt", "");
 
@@ -2655,7 +2757,8 @@ impl DataService {
                     .map_err(|e| format!("Failed to read rune subdirectory: {}", e))?;
 
                 for sub_entry in sub_entries {
-                    let sub_entry = sub_entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+                    let sub_entry =
+                        sub_entry.map_err(|e| format!("Failed to read entry: {}", e))?;
                     let sub_path = sub_entry.path();
 
                     if sub_path.is_file()
@@ -2761,6 +2864,16 @@ impl DataService {
                     })
                     .unwrap_or(0);
 
+                let tag_list: Vec<String> = char_data
+                    .get("tagList")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
                 let character = CharacterBasicInfo {
                     char_id: char_id.clone(),
                     name,
@@ -2780,6 +2893,7 @@ impl DataService {
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string(),
+                    sub_profession_name: None, // Will be filled later if needed
                     position: char_data
                         .get("position")
                         .and_then(|v| v.as_str())
@@ -2797,6 +2911,19 @@ impl DataService {
                         .get("teamId")
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string()),
+                    item_desc: char_data
+                        .get("itemDesc")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    item_usage: char_data
+                        .get("itemUsage")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    description: char_data
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    tag_list,
                 };
 
                 characters.push(character);
@@ -2804,11 +2931,7 @@ impl DataService {
         }
 
         // 按稀有度和名字排序
-        characters.sort_by(|a, b| {
-            b.rarity
-                .cmp(&a.rarity)
-                .then_with(|| a.name.cmp(&b.name))
-        });
+        characters.sort_by(|a, b| b.rarity.cmp(&a.rarity).then_with(|| a.name.cmp(&b.name)));
 
         Ok(characters)
     }
@@ -3108,6 +3231,721 @@ impl DataService {
             char_id: char_id.to_string(),
             char_name,
             equipments,
+        })
+    }
+
+    /// 获取干员潜能信物
+    pub fn get_character_potential_token(
+        &self,
+        char_id: &str,
+    ) -> Result<CharacterPotentialToken, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let item_file = self.data_dir.join("zh_CN/gamedata/excel/item_table.json");
+        let content = fs::read_to_string(&item_file)
+            .map_err(|e| format!("Failed to read item table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse item table: {}", e))?;
+
+        let items = data
+            .get("items")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "items not found".to_string())?;
+
+        // 潜能信物ID格式：p_char_{char_id}
+        let token_id = format!("p_{}", char_id);
+        let token_data = items
+            .get(&token_id)
+            .ok_or_else(|| format!("Potential token not found for character {}", char_id))?;
+
+        // 获取干员名字
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_name = char_table
+            .get(char_id)
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        Ok(CharacterPotentialToken {
+            char_id: char_id.to_string(),
+            char_name,
+            item_id: token_id,
+            token_name: token_data
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            token_desc: token_data
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            token_usage: token_data
+                .get("usage")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            rarity: token_data
+                .get("rarity")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            obtain_approach: token_data
+                .get("obtainApproach")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        })
+    }
+
+    /// 获取干员天赋
+    pub fn get_character_talents(&self, char_id: &str) -> Result<CharacterTalents, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_data = data
+            .get(char_id)
+            .ok_or_else(|| format!("Character {} not found", char_id))?;
+
+        let char_name = char_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let talents: Vec<TalentInfo> = char_data
+            .get("talents")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .enumerate()
+                    .filter_map(|(idx, talent)| {
+                        let candidates: Vec<TalentCandidate> = talent
+                            .get("candidates")
+                            .and_then(|v| v.as_array())
+                            .map(|cands| {
+                                cands
+                                    .iter()
+                                    .filter_map(|cand| {
+                                        Some(TalentCandidate {
+                                            unlock_condition: TalentUnlockCondition {
+                                                phase: cand
+                                                    .get("unlockCondition")
+                                                    .and_then(|v| v.get("phase"))
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("PHASE_0")
+                                                    .to_string(),
+                                                level: cand
+                                                    .get("unlockCondition")
+                                                    .and_then(|v| v.get("level"))
+                                                    .and_then(|v| v.as_i64())
+                                                    .unwrap_or(1)
+                                                    as i32,
+                                            },
+                                            name: cand
+                                                .get("name")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            description: cand
+                                                .get("description")
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.to_string()),
+                                            range_description: cand
+                                                .get("rangeDescription")
+                                                .and_then(|v| v.as_str())
+                                                .map(|s| s.to_string()),
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        if candidates.is_empty() {
+                            None
+                        } else {
+                            Some(TalentInfo {
+                                talent_index: idx as i32,
+                                candidates,
+                            })
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(CharacterTalents {
+            char_id: char_id.to_string(),
+            char_name,
+            talents,
+        })
+    }
+
+    /// 获取干员特性
+    pub fn get_character_trait(&self, char_id: &str) -> Result<CharacterTrait, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_data = data
+            .get(char_id)
+            .ok_or_else(|| format!("Character {} not found", char_id))?;
+
+        let char_name = char_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let trait_info = char_data.get("trait").and_then(|trait_data| {
+            let candidates: Vec<TraitCandidate> = trait_data
+                .get("candidates")
+                .and_then(|v| v.as_array())
+                .map(|cands| {
+                    cands
+                        .iter()
+                        .filter_map(|cand| {
+                            Some(TraitCandidate {
+                                unlock_condition: TraitUnlockCondition {
+                                    phase: cand
+                                        .get("unlockCondition")
+                                        .and_then(|v| v.get("phase"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("PHASE_0")
+                                        .to_string(),
+                                    level: cand
+                                        .get("unlockCondition")
+                                        .and_then(|v| v.get("level"))
+                                        .and_then(|v| v.as_i64())
+                                        .unwrap_or(1) as i32,
+                                },
+                                override_descripton: cand
+                                    .get("overrideDescripton")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string()),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if candidates.is_empty() {
+                None
+            } else {
+                Some(TraitInfo { candidates })
+            }
+        });
+
+        Ok(CharacterTrait {
+            char_id: char_id.to_string(),
+            char_name,
+            trait_info,
+        })
+    }
+
+    /// 获取干员潜能加成
+    pub fn get_character_potential_ranks(
+        &self,
+        char_id: &str,
+    ) -> Result<CharacterPotentialRanks, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_data = data
+            .get(char_id)
+            .ok_or_else(|| format!("Character {} not found", char_id))?;
+
+        let char_name = char_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let potential_ranks: Vec<PotentialRank> = char_data
+            .get("potentialRanks")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .enumerate()
+                    .filter_map(|(idx, rank)| {
+                        Some(PotentialRank {
+                            rank: idx as i32,
+                            description: rank
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(CharacterPotentialRanks {
+            char_id: char_id.to_string(),
+            char_name,
+            potential_ranks,
+        })
+    }
+
+    /// 获取干员技能
+    pub fn get_character_skills(&self, char_id: &str) -> Result<CharacterSkills, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        // 读取character_table获取技能ID列表
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_data = char_table
+            .get(char_id)
+            .ok_or_else(|| format!("Character {} not found", char_id))?;
+
+        let char_name = char_data
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // 读取skill_table获取技能详情
+        let skill_file = self.data_dir.join("zh_CN/gamedata/excel/skill_table.json");
+        let skill_content = fs::read_to_string(&skill_file)
+            .map_err(|e| format!("Failed to read skill table: {}", e))?;
+        let skill_table: Value = serde_json::from_str(&skill_content)
+            .map_err(|e| format!("Failed to parse skill table: {}", e))?;
+
+        let mut skills = Vec::new();
+
+        if let Some(skill_arr) = char_data.get("skills").and_then(|v| v.as_array()) {
+            for skill_ref in skill_arr {
+                if let Some(skill_id) = skill_ref.get("skillId").and_then(|v| v.as_str()) {
+                    if let Some(skill_data) = skill_table.get(skill_id) {
+                        let levels: Vec<SkillLevel> = skill_data
+                            .get("levels")
+                            .and_then(|v| v.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .enumerate()
+                                    .filter_map(|(idx, level)| {
+                                        let sp_data = level.get("spData")?;
+                                        Some(SkillLevel {
+                                            level: (idx + 1) as i32,
+                                            name: level
+                                                .get("name")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            description: level
+                                                .get("description")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            skill_type: level
+                                                .get("skillType")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            duration_type: level
+                                                .get("durationType")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("")
+                                                .to_string(),
+                                            sp_data: SkillSPData {
+                                                sp_type: sp_data
+                                                    .get("spType")
+                                                    .and_then(|v| v.as_str())
+                                                    .unwrap_or("")
+                                                    .to_string(),
+                                                sp_cost: sp_data
+                                                    .get("spCost")
+                                                    .and_then(|v| v.as_i64())
+                                                    .unwrap_or(0)
+                                                    as i32,
+                                                init_sp: sp_data
+                                                    .get("initSp")
+                                                    .and_then(|v| v.as_i64())
+                                                    .unwrap_or(0)
+                                                    as i32,
+                                            },
+                                            duration: level
+                                                .get("duration")
+                                                .and_then(|v| v.as_f64())
+                                                .unwrap_or(0.0)
+                                                as f32,
+                                        })
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+
+                        if !levels.is_empty() {
+                            skills.push(SkillInfo {
+                                skill_id: skill_id.to_string(),
+                                icon_id: skill_data
+                                    .get("iconId")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string()),
+                                levels,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterSkills {
+            char_id: char_id.to_string(),
+            char_name,
+            skills,
+        })
+    }
+
+    /// 获取干员皮肤
+    pub fn get_character_skins(&self, char_id: &str) -> Result<CharacterSkins, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        // 读取character_table获取干员名字
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_name = char_table
+            .get(char_id)
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        // 读取skin_table
+        let skin_file = self.data_dir.join("zh_CN/gamedata/excel/skin_table.json");
+        let skin_content = fs::read_to_string(&skin_file)
+            .map_err(|e| format!("Failed to read skin table: {}", e))?;
+        let skin_table: Value = serde_json::from_str(&skin_content)
+            .map_err(|e| format!("Failed to parse skin table: {}", e))?;
+
+        let char_skins_obj = skin_table
+            .get("charSkins")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "charSkins not found".to_string())?;
+
+        let mut skins = Vec::new();
+
+        // 遍历所有皮肤，找出属于该干员的
+        for (skin_id, skin_data) in char_skins_obj.iter() {
+            let skin_char_id = skin_data
+                .get("charId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            if skin_char_id == char_id {
+                let display_skin = skin_data.get("displaySkin");
+                let drawer_list: Vec<String> = display_skin
+                    .and_then(|ds| ds.get("drawerList"))
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                skins.push(SkinInfo {
+                    skin_id: skin_id.clone(),
+                    skin_name: display_skin
+                        .and_then(|ds| ds.get("skinName"))
+                        .and_then(|v| v.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string()),
+                    illust_id: skin_data
+                        .get("illustId")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    avatar_id: skin_data
+                        .get("avatarId")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    portrait_id: skin_data
+                        .get("portraitId")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    is_buy_skin: skin_data
+                        .get("isBuySkin")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    skin_group_name: display_skin
+                        .and_then(|ds| ds.get("skinGroupName"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    content: display_skin
+                        .and_then(|ds| ds.get("content"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    dialog: display_skin
+                        .and_then(|ds| ds.get("dialog"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    usage: display_skin
+                        .and_then(|ds| ds.get("usage"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    description: display_skin
+                        .and_then(|ds| ds.get("description"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    obtain_approach: display_skin
+                        .and_then(|ds| ds.get("obtainApproach"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    drawer_list,
+                });
+            }
+        }
+
+        // 按sortId排序（如果有的话）
+        skins.sort_by(|a, b| a.skin_id.cmp(&b.skin_id));
+
+        Ok(CharacterSkins {
+            char_id: char_id.to_string(),
+            char_name,
+            skins,
+        })
+    }
+
+    /// 获取子职业信息
+    pub fn get_sub_profession_info(&self, sub_prof_id: &str) -> Result<SubProfessionInfo, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let uniequip_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/uniequip_table.json");
+        let content = fs::read_to_string(&uniequip_file)
+            .map_err(|e| format!("Failed to read uniequip table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse uniequip table: {}", e))?;
+
+        let sub_prof_dict = data
+            .get("subProfDict")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "subProfDict not found".to_string())?;
+
+        let sub_prof_data = sub_prof_dict
+            .get(sub_prof_id)
+            .ok_or_else(|| format!("Sub profession {} not found", sub_prof_id))?;
+
+        Ok(SubProfessionInfo {
+            sub_profession_id: sub_prof_data
+                .get("subProfessionId")
+                .and_then(|v| v.as_str())
+                .unwrap_or(sub_prof_id)
+                .to_string(),
+            sub_profession_name: sub_prof_data
+                .get("subProfessionName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            sub_profession_catagory: sub_prof_data
+                .get("subProfessionCatagory")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+        })
+    }
+
+    /// 获取势力/团队信息
+    pub fn get_team_power_info(&self, power_id: &str) -> Result<TeamPowerInfo, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let team_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/handbook_team_table.json");
+        let content = fs::read_to_string(&team_file)
+            .map_err(|e| format!("Failed to read handbook team table: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse handbook team table: {}", e))?;
+
+        let power_data = data
+            .get(power_id)
+            .ok_or_else(|| format!("Power {} not found", power_id))?;
+
+        Ok(TeamPowerInfo {
+            power_id: power_data
+                .get("powerId")
+                .and_then(|v| v.as_str())
+                .unwrap_or(power_id)
+                .to_string(),
+            power_name: power_data
+                .get("powerName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            power_code: power_data
+                .get("powerCode")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            color: power_data
+                .get("color")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            is_limited: power_data
+                .get("isLimited")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        })
+    }
+
+    /// 获取干员基建技能
+    pub fn get_character_building_skills(
+        &self,
+        char_id: &str,
+    ) -> Result<CharacterBuildingSkills, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        // 读取building_data获取干员的基建技能引用
+        let building_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/building_data.json");
+        let building_content = fs::read_to_string(&building_file)
+            .map_err(|e| format!("Failed to read building data: {}", e))?;
+        let building_data: Value = serde_json::from_str(&building_content)
+            .map_err(|e| format!("Failed to parse building data: {}", e))?;
+
+        // 获取干员名字
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character table: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character table: {}", e))?;
+
+        let char_name = char_table
+            .get(char_id)
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let chars = building_data
+            .get("chars")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "chars not found in building data".to_string())?;
+
+        let buffs = building_data
+            .get("buffs")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "buffs not found in building data".to_string())?;
+
+        let char_building_data = chars
+            .get(char_id)
+            .ok_or_else(|| format!("Character {} not found in building data", char_id))?;
+
+        let mut building_skills = Vec::new();
+
+        // 获取干员的所有基建技能
+        if let Some(buff_char) = char_building_data.get("buffChar").and_then(|v| v.as_array()) {
+            for buff_phase in buff_char {
+                if let Some(buff_data_arr) = buff_phase.get("buffData").and_then(|v| v.as_array())
+                {
+                    for buff_ref in buff_data_arr {
+                        if let Some(buff_id) = buff_ref.get("buffId").and_then(|v| v.as_str()) {
+                            if let Some(buff_info) = buffs.get(buff_id) {
+                                let unlock_cond = buff_ref.get("cond");
+                                building_skills.push(BuildingSkillInfo {
+                                    buff_id: buff_id.to_string(),
+                                    buff_name: buff_info
+                                        .get("buffName")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    description: buff_info
+                                        .get("description")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    room_type: buff_info
+                                        .get("roomType")
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
+                                    unlock_condition: BuildingSkillUnlockCondition {
+                                        phase: unlock_cond
+                                            .and_then(|v| v.get("phase"))
+                                            .and_then(|v| v.as_str())
+                                            .unwrap_or("PHASE_0")
+                                            .to_string(),
+                                        level: unlock_cond
+                                            .and_then(|v| v.get("level"))
+                                            .and_then(|v| v.as_i64())
+                                            .unwrap_or(1) as i32,
+                                    },
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(CharacterBuildingSkills {
+            char_id: char_id.to_string(),
+            char_name,
+            building_skills,
         })
     }
 }

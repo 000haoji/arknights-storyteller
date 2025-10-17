@@ -145,7 +145,15 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
       setIndexMessage("全文索引建立完成");
     } catch (err) {
       console.error("Build index failed:", err);
-      setIndexError("建立索引失败，请重试");
+      const message =
+        err instanceof Error ? err.message : typeof err === "string" ? err : "";
+      if (message.includes("NOT_INSTALLED")) {
+        setIndexError("未检测到本地数据，请先同步或导入完整数据包后再建立索引。");
+      } else if (message) {
+        setIndexError(`建立索引失败：${message}`);
+      } else {
+        setIndexError("建立索引失败，请重试");
+      }
     } finally {
       setBuildingIndex(false);
     }

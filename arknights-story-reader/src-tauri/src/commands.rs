@@ -1,13 +1,14 @@
 use crate::data_service::DataService;
 use crate::models::{
-    Chapter, CharacterBasicInfo, CharacterEquipment, CharacterHandbook, CharacterVoice,
-    ParsedStoryContent, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
-    StoryIndexStatus,
+    Chapter, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment, CharacterHandbook,
+    CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins, CharacterSkills,
+    CharacterTalents, CharacterTrait, CharacterVoice, ParsedStoryContent, SearchDebugResponse,
+    SearchResult, StoryCategory, StoryEntry, StoryIndexStatus, SubProfessionInfo, TeamPowerInfo,
 };
 use crate::parser::parse_story_text;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -294,6 +295,105 @@ pub async fn get_character_equipment(
         .map_err(|err| format!("Failed to join character equipment task: {}", err))?
 }
 
+#[tauri::command]
+pub async fn get_character_potential_token(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterPotentialToken, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_potential_token(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character potential token task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_talents(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterTalents, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_talents(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character talents task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_trait(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterTrait, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_trait(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character trait task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_potential_ranks(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterPotentialRanks, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_potential_ranks(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character potential ranks task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_skills(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterSkills, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_skills(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character skills task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_skins(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterSkins, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_skins(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character skins task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_sub_profession_info(
+    state: State<'_, AppState>,
+    sub_prof_id: String,
+) -> Result<SubProfessionInfo, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_sub_profession_info(&sub_prof_id))
+        .await
+        .map_err(|err| format!("Failed to join sub profession info task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_team_power_info(
+    state: State<'_, AppState>,
+    power_id: String,
+) -> Result<TeamPowerInfo, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_team_power_info(&power_id))
+        .await
+        .map_err(|err| format!("Failed to join team power info task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_building_skills(
+    state: State<'_, AppState>,
+    char_id: String,
+) -> Result<CharacterBuildingSkills, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_building_skills(&char_id))
+        .await
+        .map_err(|err| format!("Failed to join character building skills task: {}", err))?
+}
+
 // ==================== Android Update Methods (Multi-fallback) ====================
 
 #[cfg(target_os = "android")]
@@ -347,14 +447,13 @@ pub async fn android_update_method2_http_download(
         .path()
         .app_cache_dir()
         .map_err(|e| format!("获取缓存目录失败: {}", e))?;
-    std::fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("创建缓存目录失败: {}", e))?;
+    std::fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
 
-    let file_name = file_name.unwrap_or_else(|| format!("update-{}.apk", chrono::Utc::now().timestamp()));
+    let file_name =
+        file_name.unwrap_or_else(|| format!("update-{}.apk", chrono::Utc::now().timestamp()));
     let apk_path = cache_dir.join(&file_name);
 
-    let mut file = File::create(&apk_path)
-        .map_err(|e| format!("创建 APK 文件失败: {}", e))?;
+    let mut file = File::create(&apk_path).map_err(|e| format!("创建 APK 文件失败: {}", e))?;
     file.write_all(&bytes)
         .map_err(|e| format!("写入 APK 文件失败: {}", e))?;
 
@@ -362,11 +461,14 @@ pub async fn android_update_method2_http_download(
 }
 
 #[cfg(target_os = "android")]
-fn install_apk_via_intent(app: AppHandle, apk_path: std::path::PathBuf) -> Result<AndroidInstallResponse, String> {
+fn install_apk_via_intent(
+    app: AppHandle,
+    apk_path: std::path::PathBuf,
+) -> Result<AndroidInstallResponse, String> {
     use tauri::Manager;
-    
+
     let path_str = apk_path.to_string_lossy().to_string();
-    
+
     // Try plugin's install helper if available
     if let Some(_updater) = app.try_state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>() {
         // Try to use native plugin to trigger install
@@ -388,9 +490,7 @@ fn install_apk_via_intent(app: AppHandle, apk_path: std::path::PathBuf) -> Resul
 
 #[cfg(target_os = "android")]
 #[tauri::command]
-pub async fn android_update_method3_frontend_download(
-    app: AppHandle,
-) -> Result<String, String> {
+pub async fn android_update_method3_frontend_download(app: AppHandle) -> Result<String, String> {
     use tauri::Manager;
     let cache_dir = app
         .path()
@@ -446,9 +546,7 @@ pub async fn android_update_method2_http_download(
 
 #[cfg(not(target_os = "android"))]
 #[tauri::command]
-pub async fn android_update_method3_frontend_download(
-    _app: AppHandle,
-) -> Result<String, String> {
+pub async fn android_update_method3_frontend_download(_app: AppHandle) -> Result<String, String> {
     Err("Not Android platform".into())
 }
 

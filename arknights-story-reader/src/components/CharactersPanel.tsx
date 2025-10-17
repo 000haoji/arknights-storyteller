@@ -6,13 +6,20 @@ import type {
   CharacterBasicInfo,
   CharacterHandbook,
   CharacterVoice,
-  CharacterEquipment 
+  CharacterEquipment,
+  CharacterPotentialToken,
+  CharacterTalents,
+  CharacterTrait,
+  CharacterPotentialRanks,
+  CharacterSkills,
+  CharacterSkins,
+  CharacterBuildingSkills,
 } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/ui/collapsible";
-import { ArrowLeft, Loader2, BookOpen, Mic, Star, Package } from "lucide-react";
+import { ArrowLeft, Loader2, BookOpen, Mic, Star, Package, Award, Zap, Sparkles, Palette, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFavoriteCharacters } from "@/hooks/useFavoriteCharacters";
 
@@ -79,7 +86,16 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
   const [equipment, setEquipment] = useState<CharacterEquipment | null>(null);
   const [handbookLoading, setHandbookLoading] = useState(false);
   const [handbookSearch, setHandbookSearch] = useState("");
-  const [handbookTab, setHandbookTab] = useState<"archive" | "voice" | "equipment">("archive");
+  const [handbookTab, setHandbookTab] = useState<"archive" | "voice" | "equipment" | "potential" | "skills" | "skins" | "building">("archive");
+  
+  // 新增数据状态
+  const [potentialToken, setPotentialToken] = useState<CharacterPotentialToken | null>(null);
+  const [talents, setTalents] = useState<CharacterTalents | null>(null);
+  const [trait, setTrait] = useState<CharacterTrait | null>(null);
+  const [potentialRanks, setPotentialRanks] = useState<CharacterPotentialRanks | null>(null);
+  const [skills, setSkills] = useState<CharacterSkills | null>(null);
+  const [skins, setSkins] = useState<CharacterSkins | null>(null);
+  const [buildingSkills, setBuildingSkills] = useState<CharacterBuildingSkills | null>(null);
 
   const CACHE_PREFIX = "arknights-characters-cache";
   const getCacheKey = useCallback((v: string) => `${CACHE_PREFIX}:${v}`, []);
@@ -262,18 +278,43 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
     }
   }, [charactersLoading, characters.length]);
 
-  // 加载指定干员的档案、语音和模组
+  // 加载指定干员的所有数据
   const loadCharacterData = useCallback(async (charId: string) => {
     setHandbookLoading(true);
     try {
-      const [handbookData, voicesData, equipmentData] = await Promise.all([
+      const [
+        handbookData,
+        voicesData,
+        equipmentData,
+        potentialTokenData,
+        talentsData,
+        traitData,
+        potentialRanksData,
+        skillsData,
+        skinsData,
+        buildingSkillsData,
+      ] = await Promise.all([
         api.getCharacterHandbook(charId),
         api.getCharacterVoices(charId),
         api.getCharacterEquipment(charId),
+        api.getCharacterPotentialToken(charId).catch(() => null),
+        api.getCharacterTalents(charId).catch(() => null),
+        api.getCharacterTrait(charId).catch(() => null),
+        api.getCharacterPotentialRanks(charId).catch(() => null),
+        api.getCharacterSkills(charId).catch(() => null),
+        api.getCharacterSkins(charId).catch(() => null),
+        api.getCharacterBuildingSkills(charId).catch(() => null),
       ]);
       setHandbook(handbookData);
       setVoices(voicesData);
       setEquipment(equipmentData);
+      setPotentialToken(potentialTokenData);
+      setTalents(talentsData);
+      setTrait(traitData);
+      setPotentialRanks(potentialRanksData);
+      setSkills(skillsData);
+      setSkins(skinsData);
+      setBuildingSkills(buildingSkillsData);
     } catch (err) {
       console.error("[CharactersPanel] 加载干员数据失败:", err);
     } finally {
@@ -376,51 +417,62 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
 
   return (
     <div className="h-full flex flex-col bg-[hsl(var(--color-background))]">
-      {/* 子标签页切换 */}
-      <div className="px-4 pt-3 pb-2 border-b border-[hsl(var(--color-border))]">
-        <div className="flex gap-2">
-          <Button
-            variant={subTab === "stats" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => { 
-              setSubTab("stats"); 
+      <header className="px-4 py-3 border-b border-[hsl(var(--color-border))]">
+        {/* 第一行：返回按钮 + 标题/切换标签 + 搜索 */}
+        <div className="flex items-center gap-3">
+          {(selected || selectedCharId) && (
+            <Button variant="ghost" size="icon" onClick={() => {
               setSelected(null);
               setSelectedCharId(null);
-            }}
-          >
-            人物统计
-          </Button>
-          <Button
-            variant={subTab === "handbook" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => { 
-              setSubTab("handbook");
-              setSelected(null);
-              setSelectedCharId(null);
-            }}
-          >
-            人物档案
-          </Button>
-        </div>
-      </div>
+              setHandbook(null);
+              setVoices(null);
+              setEquipment(null);
+              setPotentialToken(null);
+              setTalents(null);
+              setTrait(null);
+              setPotentialRanks(null);
+              setSkills(null);
+              setSkins(null);
+              setBuildingSkills(null);
+            }} aria-label="返回">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          )}
+          
+          {/* 左侧：标题或切换按钮 */}
+          {(selected || selectedCharId) ? (
+            <h1 className="text-base font-semibold">
+              {selected ? `人物：${selected}` : selectedCharId && handbook ? `${handbook.charName}` : "人物档案"}
+            </h1>
+          ) : (
+            <div className="flex gap-2">
+              <Button
+                variant={subTab === "stats" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => { 
+                  setSubTab("stats"); 
+                  setSelected(null);
+                  setSelectedCharId(null);
+                }}
+              >
+                人物统计
+              </Button>
+              <Button
+                variant={subTab === "handbook" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => { 
+                  setSubTab("handbook");
+                  setSelected(null);
+                  setSelectedCharId(null);
+                }}
+              >
+                人物档案
+              </Button>
+            </div>
+          )}
 
-      <header className="px-4 py-3 border-b border-[hsl(var(--color-border))] flex items-center gap-3">
-        {(selected || selectedCharId) && (
-          <Button variant="ghost" size="icon" onClick={() => {
-            setSelected(null);
-            setSelectedCharId(null);
-            setHandbook(null);
-            setVoices(null);
-            setEquipment(null);
-          }} aria-label="返回">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        )}
-        <h1 className="text-base font-semibold">
-          {selected ? `人物：${selected}` : selectedCharId && handbook ? `${handbook.charName}` : subTab === "stats" ? "人物统计" : "人物档案"}
-        </h1>
-        {!selected && !selectedCharId && (
-          <>
+          {/* 右侧：搜索框 */}
+          {!selected && !selectedCharId && (
             <div className="ml-auto w-56">
               <Input 
                 placeholder={subTab === "stats" ? "搜索人物" : "搜索干员"} 
@@ -428,8 +480,8 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                 onChange={(e) => subTab === "stats" ? setSearch(e.target.value) : setHandbookSearch(e.target.value)} 
               />
             </div>
-          </>
-        )}
+          )}
+        </div>
       </header>
 
       <div className="flex-1 overflow-hidden">
@@ -613,31 +665,70 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
 
                   {!handbookLoading && handbook && voices && equipment && (
                     <>
-                      {/* 档案/语音/模组切换按钮 */}
-                      <div className="flex gap-2 pb-2 border-b border-[hsl(var(--color-border))]">
+                      {/* 档案/语音/模组/潜能/技能/皮肤切换按钮 */}
+                      <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-[hsl(var(--color-border))]">
                         <Button
-                          variant={handbookTab === "archive" ? "default" : "ghost"}
+                          variant={handbookTab === "archive" ? "default" : "outline"}
                           size="sm"
+                          className="rounded-full px-4"
                           onClick={() => setHandbookTab("archive")}
                         >
                           <BookOpen className="h-4 w-4 mr-2" />
                           档案资料
                         </Button>
                         <Button
-                          variant={handbookTab === "voice" ? "default" : "ghost"}
+                          variant={handbookTab === "voice" ? "default" : "outline"}
                           size="sm"
+                          className="rounded-full px-4"
                           onClick={() => setHandbookTab("voice")}
                         >
                           <Mic className="h-4 w-4 mr-2" />
                           语音 ({voices.voices.length})
                         </Button>
                         <Button
-                          variant={handbookTab === "equipment" ? "default" : "ghost"}
+                          variant={handbookTab === "equipment" ? "default" : "outline"}
                           size="sm"
+                          className="rounded-full px-4"
                           onClick={() => setHandbookTab("equipment")}
                         >
                           <Package className="h-4 w-4 mr-2" />
                           模组 ({equipment.equipments.length})
+                        </Button>
+                        <Button
+                          variant={handbookTab === "potential" ? "default" : "outline"}
+                          size="sm"
+                          className="rounded-full px-4"
+                          onClick={() => setHandbookTab("potential")}
+                        >
+                          <Award className="h-4 w-4 mr-2" />
+                          潜能
+                        </Button>
+                        <Button
+                          variant={handbookTab === "skills" ? "default" : "outline"}
+                          size="sm"
+                          className="rounded-full px-4"
+                          onClick={() => setHandbookTab("skills")}
+                        >
+                          <Zap className="h-4 w-4 mr-2" />
+                          技能 ({skills?.skills.length || 0})
+                        </Button>
+                        <Button
+                          variant={handbookTab === "skins" ? "default" : "outline"}
+                          size="sm"
+                          className="rounded-full px-4"
+                          onClick={() => setHandbookTab("skins")}
+                        >
+                          <Palette className="h-4 w-4 mr-2" />
+                          皮肤 ({skins?.skins.length || 0})
+                        </Button>
+                        <Button
+                          variant={handbookTab === "building" ? "default" : "outline"}
+                          size="sm"
+                          className="rounded-full px-4"
+                          onClick={() => setHandbookTab("building")}
+                        >
+                          <Home className="h-4 w-4 mr-2" />
+                          基建 ({buildingSkills?.buildingSkills.length || 0})
                         </Button>
                       </div>
 
@@ -723,6 +814,276 @@ export function CharactersPanel({ onOpenStory }: CharactersPanelProps) {
                                 </div>
                               </div>
                             ))
+                          )}
+                        </div>
+                      )}
+
+                      {/* 潜能信息 */}
+                      {handbookTab === "potential" && (
+                        <div className="space-y-4">
+                          {/* 潜能信物 */}
+                          {potentialToken && (
+                            <div className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4">
+                              <div className="flex items-start gap-3 mb-3">
+                                <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-gradient-to-br from-amber-500/20 to-amber-700/20 flex items-center justify-center">
+                                  <Sparkles className="h-6 w-6 text-amber-500" />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="font-medium text-lg mb-1">{potentialToken.tokenName}</div>
+                                  <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                    {potentialToken.rarity} · {potentialToken.obtainApproach}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="text-sm text-[hsl(var(--color-foreground))] mb-3 italic border-l-2 border-amber-500 pl-3 py-1">
+                                "{potentialToken.tokenDesc}"
+                              </div>
+                              <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                {potentialToken.tokenUsage}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 潜能加成 */}
+                          {potentialRanks && potentialRanks.potentialRanks.length > 0 && (
+                            <div>
+                              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
+                                <Award className="h-4 w-4" />
+                                潜能加成
+                              </h3>
+                              <div className="space-y-2">
+                                {potentialRanks.potentialRanks.map((rank, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center gap-3 rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3"
+                                  >
+                                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[hsl(var(--color-primary))]/10 flex items-center justify-center">
+                                      <span className="text-sm font-medium text-[hsl(var(--color-primary))]">
+                                        {idx + 1}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm">{rank.description}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 天赋 */}
+                          {talents && talents.talents.length > 0 && (
+                            <div>
+                              <h3 className="text-sm font-medium mb-3">天赋</h3>
+                              <div className="space-y-3">
+                                {talents.talents.map((talent, idx) => (
+                                  <Collapsible key={idx} title={`天赋 ${idx + 1}`} defaultOpen={idx === 0}>
+                                    <div className="space-y-2">
+                                      {talent.candidates.map((cand, candIdx) => (
+                                        <div
+                                          key={candIdx}
+                                          className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3"
+                                        >
+                                          <div className="flex items-center gap-2 mb-2">
+                                            <div className="font-medium">{cand.name}</div>
+                                            <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                              {cand.unlockCondition.phase} Lv.{cand.unlockCondition.level}
+                                            </div>
+                                          </div>
+                                          {cand.description && (
+                                            <div className="text-sm text-[hsl(var(--color-muted-foreground))]">
+                                              {cand.description}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </Collapsible>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 特性 */}
+                          {trait && trait.trait && (
+                            <div>
+                              <h3 className="text-sm font-medium mb-3">特性</h3>
+                              <div className="space-y-2">
+                                {trait.trait.candidates.map((cand, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-3"
+                                  >
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                        {cand.unlockCondition.phase} Lv.{cand.unlockCondition.level}
+                                      </div>
+                                    </div>
+                                    {cand.overrideDescripton && (
+                                      <div className="text-sm">{cand.overrideDescripton}</div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 技能列表 */}
+                      {handbookTab === "skills" && (
+                        <div className="space-y-4">
+                          {skills && skills.skills.length > 0 ? (
+                            skills.skills.map((skill, idx) => (
+                              <Collapsible key={idx} title={`技能 ${idx + 1}`} defaultOpen={idx === 0}>
+                                <div className="space-y-3">
+                                  {skill.levels.slice(-1).map((level) => (
+                                    <div
+                                      key={level.level}
+                                      className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4"
+                                    >
+                                      <div className="flex items-start gap-3 mb-3">
+                                        <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500/20 to-cyan-500/20 flex items-center justify-center">
+                                          <Zap className="h-5 w-5 text-blue-500" />
+                                        </div>
+                                        <div className="flex-1">
+                                          <div className="font-medium text-base mb-1">{level.name}</div>
+                                          <div className="flex items-center gap-3 text-xs text-[hsl(var(--color-muted-foreground))]">
+                                            <span>{level.skillType}</span>
+                                            <span>•</span>
+                                            <span>消耗: {level.spData.spCost} SP</span>
+                                            {level.spData.initSp > 0 && (
+                                              <>
+                                                <span>•</span>
+                                                <span>初始: {level.spData.initSp} SP</span>
+                                              </>
+                                            )}
+                                            {level.duration > 0 && (
+                                              <>
+                                                <span>•</span>
+                                                <span>持续: {level.duration}秒</span>
+                                              </>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="text-sm text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap leading-relaxed">
+                                        {level.description}
+                                      </div>
+                                      <div className="mt-3 pt-3 border-t border-[hsl(var(--color-border))]">
+                                        <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+                                          等级范围: 1-{skill.levels.length} ({level.level > 7 ? '专精' : '通用'}等级)
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Collapsible>
+                            ))
+                          ) : (
+                            <div className="text-sm text-[hsl(var(--color-muted-foreground))] text-center py-8">
+                              该干员暂无技能数据
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 皮肤列表 */}
+                      {handbookTab === "skins" && (
+                        <div className="space-y-3">
+                          {skins && skins.skins.length > 0 ? (
+                            skins.skins.map((skin) => (
+                              <div
+                                key={skin.skinId}
+                                className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4"
+                              >
+                                <div className="flex items-start gap-3 mb-3">
+                                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                                    <Palette className="h-5 w-5 text-purple-500" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-medium text-base mb-1">
+                                      {skin.skinName || "默认服装"}
+                                    </div>
+                                    <div className="flex items-center gap-2 text-xs text-[hsl(var(--color-muted-foreground))]">
+                                      {skin.skinGroupName && <span>{skin.skinGroupName}</span>}
+                                      {skin.isBuySkin && (
+                                        <>
+                                          {skin.skinGroupName && <span>•</span>}
+                                          <span className="text-amber-500">付费皮肤</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {skin.content && (
+                                  <div className="text-sm text-[hsl(var(--color-muted-foreground))] mb-3 whitespace-pre-wrap leading-relaxed">
+                                    {skin.content}
+                                  </div>
+                                )}
+                                
+                                {skin.dialog && (
+                                  <div className="text-sm text-[hsl(var(--color-foreground))] mb-3 italic border-l-2 border-purple-500 pl-3 py-1">
+                                    "{skin.dialog}"
+                                  </div>
+                                )}
+                                
+                                {skin.drawerList.length > 0 && (
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span className="text-[hsl(var(--color-muted-foreground))]">画师:</span>
+                                    <span className="text-[hsl(var(--color-foreground))]">
+                                      {skin.drawerList.join(", ")}
+                                    </span>
+                                  </div>
+                                )}
+                                
+                                {skin.obtainApproach && (
+                                  <div className="mt-2 text-xs text-[hsl(var(--color-muted-foreground))]">
+                                    获取途径: {skin.obtainApproach}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-sm text-[hsl(var(--color-muted-foreground))] text-center py-8">
+                              该干员暂无皮肤数据
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 基建技能 */}
+                      {handbookTab === "building" && (
+                        <div className="space-y-3">
+                          {buildingSkills && buildingSkills.buildingSkills.length > 0 ? (
+                            buildingSkills.buildingSkills.map((skill, idx) => (
+                              <div
+                                key={idx}
+                                className="rounded-lg border border-[hsl(var(--color-border))] bg-[hsl(var(--color-card))] p-4"
+                              >
+                                <div className="flex items-start gap-3 mb-3">
+                                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center">
+                                    <Home className="h-5 w-5 text-green-500" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="font-medium text-base mb-1">{skill.buffName}</div>
+                                    <div className="flex items-center gap-3 text-xs text-[hsl(var(--color-muted-foreground))]">
+                                      <span>{skill.roomType}</span>
+                                      <span>•</span>
+                                      <span>
+                                        {skill.unlockCondition.phase} Lv.{skill.unlockCondition.level}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="text-sm text-[hsl(var(--color-muted-foreground))] whitespace-pre-wrap leading-relaxed">
+                                  {skill.description}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-sm text-[hsl(var(--color-muted-foreground))] text-center py-8">
+                              该干员暂无基建技能数据
+                            </div>
                           )}
                         </div>
                       )}

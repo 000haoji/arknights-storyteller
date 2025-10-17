@@ -12,6 +12,15 @@ import type {
   CharacterHandbook,
   CharacterVoice,
   CharacterEquipment,
+  CharacterPotentialToken,
+  CharacterTalents,
+  CharacterTrait,
+  CharacterPotentialRanks,
+  CharacterSkills,
+  CharacterSkins,
+  SubProfessionInfo,
+  TeamPowerInfo,
+  CharacterBuildingSkills,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -222,5 +231,59 @@ export const api = {
   getCharacterEquipment: async (charId: string): Promise<CharacterEquipment> => {
     console.log("[API] 调用 get_character_equipment, charId:", charId);
     return invoke("get_character_equipment", { charId });
+  },
+
+  // 获取干员潜能信物
+  getCharacterPotentialToken: async (charId: string): Promise<CharacterPotentialToken> => {
+    console.log("[API] 调用 get_character_potential_token, charId:", charId);
+    return invoke("get_character_potential_token", { charId });
+  },
+
+  // 获取干员天赋
+  getCharacterTalents: async (charId: string): Promise<CharacterTalents> => {
+    console.log("[API] 调用 get_character_talents, charId:", charId);
+    return invoke("get_character_talents", { charId });
+  },
+
+  // 获取干员特性
+  getCharacterTrait: async (charId: string): Promise<CharacterTrait> => {
+    console.log("[API] 调用 get_character_trait, charId:", charId);
+    return invoke("get_character_trait", { charId });
+  },
+
+  // 获取干员潜能加成
+  getCharacterPotentialRanks: async (charId: string): Promise<CharacterPotentialRanks> => {
+    console.log("[API] 调用 get_character_potential_ranks, charId:", charId);
+    return invoke("get_character_potential_ranks", { charId });
+  },
+
+  // 获取干员技能
+  getCharacterSkills: async (charId: string): Promise<CharacterSkills> => {
+    console.log("[API] 调用 get_character_skills, charId:", charId);
+    return invoke("get_character_skills", { charId });
+  },
+
+  // 获取干员皮肤
+  getCharacterSkins: async (charId: string): Promise<CharacterSkins> => {
+    console.log("[API] 调用 get_character_skins, charId:", charId);
+    return invoke("get_character_skins", { charId });
+  },
+
+  // 获取子职业信息
+  getSubProfessionInfo: async (subProfId: string): Promise<SubProfessionInfo> => {
+    console.log("[API] 调用 get_sub_profession_info, subProfId:", subProfId);
+    return invoke("get_sub_profession_info", { subProfId });
+  },
+
+  // 获取势力/团队信息
+  getTeamPowerInfo: async (powerId: string): Promise<TeamPowerInfo> => {
+    console.log("[API] 调用 get_team_power_info, powerId:", powerId);
+    return invoke("get_team_power_info", { powerId });
+  },
+
+  // 获取干员基建技能
+  getCharacterBuildingSkills: async (charId: string): Promise<CharacterBuildingSkills> => {
+    console.log("[API] 调用 get_character_building_skills, charId:", charId);
+    return invoke("get_character_building_skills", { charId });
   },
 };

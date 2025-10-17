@@ -240,6 +240,8 @@ pub struct CharacterBasicInfo {
     pub profession: String,
     #[serde(rename = "subProfessionId")]
     pub sub_profession_id: String,
+    #[serde(rename = "subProfessionName")]
+    pub sub_profession_name: Option<String>,
     #[serde(rename = "position")]
     pub position: String,
     #[serde(rename = "nationId")]
@@ -248,6 +250,15 @@ pub struct CharacterBasicInfo {
     pub group_id: Option<String>,
     #[serde(rename = "teamId")]
     pub team_id: Option<String>,
+    // 新增字段：简介和格言
+    #[serde(rename = "itemDesc")]
+    pub item_desc: Option<String>,
+    #[serde(rename = "itemUsage")]
+    pub item_usage: Option<String>,
+    #[serde(rename = "description")]
+    pub description: Option<String>,
+    #[serde(rename = "tagList")]
+    pub tag_list: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -272,4 +283,274 @@ pub struct EquipmentInfo {
     pub equip_shining_color: Option<String>,
     #[serde(rename = "typeName")]
     pub type_name: String,
+}
+
+// ==================== 新增：潜能信物 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterPotentialToken {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "itemId")]
+    pub item_id: String,
+    #[serde(rename = "tokenName")]
+    pub token_name: String,
+    #[serde(rename = "tokenDesc")]
+    pub token_desc: String,
+    #[serde(rename = "tokenUsage")]
+    pub token_usage: String,
+    #[serde(rename = "rarity")]
+    pub rarity: String,
+    #[serde(rename = "obtainApproach")]
+    pub obtain_approach: String,
+}
+
+// ==================== 新增：天赋 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterTalents {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "talents")]
+    pub talents: Vec<TalentInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TalentInfo {
+    #[serde(rename = "talentIndex")]
+    pub talent_index: i32,
+    #[serde(rename = "candidates")]
+    pub candidates: Vec<TalentCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TalentCandidate {
+    #[serde(rename = "unlockCondition")]
+    pub unlock_condition: TalentUnlockCondition,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: Option<String>,
+    #[serde(rename = "rangeDescription")]
+    pub range_description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TalentUnlockCondition {
+    #[serde(rename = "phase")]
+    pub phase: String,
+    #[serde(rename = "level")]
+    pub level: i32,
+}
+
+// ==================== 新增：特性 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterTrait {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "trait")]
+    pub trait_info: Option<TraitInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitInfo {
+    #[serde(rename = "candidates")]
+    pub candidates: Vec<TraitCandidate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitCandidate {
+    #[serde(rename = "unlockCondition")]
+    pub unlock_condition: TraitUnlockCondition,
+    #[serde(rename = "overrideDescripton")]
+    pub override_descripton: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TraitUnlockCondition {
+    #[serde(rename = "phase")]
+    pub phase: String,
+    #[serde(rename = "level")]
+    pub level: i32,
+}
+
+// ==================== 新增：潜能加成 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterPotentialRanks {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "potentialRanks")]
+    pub potential_ranks: Vec<PotentialRank>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PotentialRank {
+    #[serde(rename = "rank")]
+    pub rank: i32,
+    #[serde(rename = "description")]
+    pub description: String,
+}
+
+// ==================== 新增：技能 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterSkills {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "skills")]
+    pub skills: Vec<SkillInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillInfo {
+    #[serde(rename = "skillId")]
+    pub skill_id: String,
+    #[serde(rename = "iconId")]
+    pub icon_id: Option<String>,
+    #[serde(rename = "levels")]
+    pub levels: Vec<SkillLevel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillLevel {
+    #[serde(rename = "level")]
+    pub level: i32,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "skillType")]
+    pub skill_type: String,
+    #[serde(rename = "durationType")]
+    pub duration_type: String,
+    #[serde(rename = "spData")]
+    pub sp_data: SkillSPData,
+    #[serde(rename = "duration")]
+    pub duration: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkillSPData {
+    #[serde(rename = "spType")]
+    pub sp_type: String,
+    #[serde(rename = "spCost")]
+    pub sp_cost: i32,
+    #[serde(rename = "initSp")]
+    pub init_sp: i32,
+}
+
+// ==================== 新增：皮肤 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterSkins {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "skins")]
+    pub skins: Vec<SkinInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SkinInfo {
+    #[serde(rename = "skinId")]
+    pub skin_id: String,
+    #[serde(rename = "skinName")]
+    pub skin_name: Option<String>,
+    #[serde(rename = "illustId")]
+    pub illust_id: Option<String>,
+    #[serde(rename = "avatarId")]
+    pub avatar_id: String,
+    #[serde(rename = "portraitId")]
+    pub portrait_id: Option<String>,
+    #[serde(rename = "isBuySkin")]
+    pub is_buy_skin: bool,
+    #[serde(rename = "skinGroupName")]
+    pub skin_group_name: Option<String>,
+    #[serde(rename = "content")]
+    pub content: Option<String>,
+    #[serde(rename = "dialog")]
+    pub dialog: Option<String>,
+    #[serde(rename = "usage")]
+    pub usage: Option<String>,
+    #[serde(rename = "description")]
+    pub description: Option<String>,
+    #[serde(rename = "obtainApproach")]
+    pub obtain_approach: Option<String>,
+    #[serde(rename = "drawerList")]
+    pub drawer_list: Vec<String>,
+}
+
+// ==================== 新增：子职业信息 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubProfessionInfo {
+    #[serde(rename = "subProfessionId")]
+    pub sub_profession_id: String,
+    #[serde(rename = "subProfessionName")]
+    pub sub_profession_name: String,
+    #[serde(rename = "subProfessionCatagory")]
+    pub sub_profession_catagory: i32,
+}
+
+// ==================== 新增：势力/团队信息 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TeamPowerInfo {
+    #[serde(rename = "powerId")]
+    pub power_id: String,
+    #[serde(rename = "powerName")]
+    pub power_name: String,
+    #[serde(rename = "powerCode")]
+    pub power_code: String,
+    #[serde(rename = "color")]
+    pub color: String,
+    #[serde(rename = "isLimited")]
+    pub is_limited: bool,
+}
+
+// ==================== 新增：基建技能 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CharacterBuildingSkills {
+    #[serde(rename = "charId")]
+    pub char_id: String,
+    #[serde(rename = "charName")]
+    pub char_name: String,
+    #[serde(rename = "buildingSkills")]
+    pub building_skills: Vec<BuildingSkillInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildingSkillInfo {
+    #[serde(rename = "buffId")]
+    pub buff_id: String,
+    #[serde(rename = "buffName")]
+    pub buff_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "roomType")]
+    pub room_type: String,
+    #[serde(rename = "unlockCondition")]
+    pub unlock_condition: BuildingSkillUnlockCondition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildingSkillUnlockCondition {
+    #[serde(rename = "phase")]
+    pub phase: String,
+    #[serde(rename = "level")]
+    pub level: i32,
 }
