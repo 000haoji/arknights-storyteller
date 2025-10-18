@@ -166,6 +166,46 @@ pub struct StoryIndexStatus {
     pub last_built_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoguelikeCharm {
+    pub id: String,
+    pub name: String,
+    pub sort: i32,
+    pub icon: Option<String>,
+    pub rarity: Option<String>,
+    pub charm_type: Option<String>,
+    pub price: Option<i32>,
+    pub obtain_in_random: bool,
+    pub item_usage: Option<String>,
+    pub item_description: Option<String>,
+    pub short_description: Option<String>,
+    pub obtain_approach: Option<String>,
+    pub special_obtain_approach: Option<String>,
+    pub rune_description: Option<String>,
+    pub rune_points: Option<f32>,
+    pub drop_stage_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoguelikeStage {
+    pub id: String,
+    pub name: String,
+    pub code: Option<String>,
+    pub description: Option<String>,
+    pub elite_description: Option<String>,
+    pub difficulty: Option<String>,
+    pub is_boss: bool,
+    pub is_elite: bool,
+    pub level_id: Option<String>,
+    pub theme_key: Option<String>,
+    pub theme_label: Option<String>,
+    pub category: Option<String>,
+    pub category_label: Option<String>,
+    pub loading_pic_id: Option<String>,
+}
+
 // ==================== 干员相关数据结构 ====================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

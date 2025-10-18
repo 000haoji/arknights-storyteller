@@ -8,6 +8,8 @@ import type {
   StoryEntry,
   StoryIndexStatus,
   SearchDebugResponse,
+  RoguelikeCharm,
+  RoguelikeStage,
   CharacterBasicInfo,
   CharacterHandbook,
   CharacterVoice,
@@ -208,6 +210,18 @@ export const api = {
   getRuneStories: async (): Promise<StoryEntry[]> => {
     console.log("[API] 调用 get_rune_stories");
     return invoke("get_rune_stories");
+  },
+
+  // 获取肉鸽符文道具
+  getRoguelikeCharms: async (): Promise<RoguelikeCharm[]> => {
+    console.log("[API] 调用 get_roguelike_charms");
+    return invoke("get_roguelike_charms");
+  },
+
+  // 获取肉鸽场景
+  getRoguelikeStages: async (): Promise<RoguelikeStage[]> => {
+    console.log("[API] 调用 get_roguelike_stages");
+    return invoke("get_roguelike_stages");
   },
 
   // 获取干员列表

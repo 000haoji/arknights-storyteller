@@ -115,6 +115,42 @@ export interface StoryCategory {
   stories: StoryEntry[];
 }
 
+export interface RoguelikeCharm {
+  id: string;
+  name: string;
+  sort: number;
+  icon?: string;
+  rarity?: string;
+  charmType?: string;
+  price?: number;
+  obtainInRandom: boolean;
+  itemUsage?: string;
+  itemDescription?: string;
+  shortDescription?: string;
+  obtainApproach?: string;
+  specialObtainApproach?: string;
+  runeDescription?: string;
+  runePoints?: number;
+  dropStageIds: string[];
+}
+
+export interface RoguelikeStage {
+  id: string;
+  name: string;
+  code?: string;
+  description?: string;
+  eliteDescription?: string;
+  difficulty?: string;
+  isBoss: boolean;
+  isElite: boolean;
+  levelId?: string;
+  themeKey?: string;
+  themeLabel?: string;
+  category?: string;
+  categoryLabel?: string;
+  loadingPicId?: string;
+}
+
 // ==================== 干员相关类型 ====================
 
 export interface CharacterBasicInfo {

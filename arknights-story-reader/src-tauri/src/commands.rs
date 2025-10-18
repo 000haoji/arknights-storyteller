@@ -3,8 +3,8 @@ use crate::models::{
     Chapter, CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
     CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
     CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, ParsedStoryContent,
-    SearchDebugResponse, SearchResult, StoryCategory, StoryEntry, StoryIndexStatus,
-    SubProfessionInfo, TeamPowerInfo,
+    RoguelikeCharm, RoguelikeStage, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
+    StoryIndexStatus, SubProfessionInfo, TeamPowerInfo,
 };
 use crate::parser::parse_story_text;
 use serde::{Deserialize, Serialize};
@@ -251,6 +251,26 @@ pub async fn get_rune_stories(state: State<'_, AppState>) -> Result<Vec<StoryEnt
     tauri::async_runtime::spawn_blocking(move || service.get_rune_stories())
         .await
         .map_err(|err| format!("Failed to join rune stories task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_roguelike_charms(
+    state: State<'_, AppState>,
+) -> Result<Vec<RoguelikeCharm>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_roguelike_charms())
+        .await
+        .map_err(|err| format!("Failed to join roguelike charms task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_roguelike_stages(
+    state: State<'_, AppState>,
+) -> Result<Vec<RoguelikeStage>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_roguelike_stages())
+        .await
+        .map_err(|err| format!("Failed to join roguelike stages task: {}", err))?
 }
 
 #[tauri::command]

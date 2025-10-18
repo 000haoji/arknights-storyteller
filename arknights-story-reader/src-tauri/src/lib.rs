@@ -59,6 +59,8 @@ pub fn run() {
             commands::get_memory_stories,
             commands::get_record_stories_grouped,
             commands::get_rune_stories,
+            commands::get_roguelike_charms,
+            commands::get_roguelike_stages,
             commands::get_characters_list,
             commands::get_character_handbook,
             commands::get_character_voices,

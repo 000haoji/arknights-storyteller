@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { StoryList } from "@/components/StoryList";
 import { StoryReader } from "@/components/StoryReader";
@@ -42,6 +42,54 @@ function App() {
   const [clueReaderSetId, setClueReaderSetId] = useState<string | null>(null);
 
   const readerActive = readerVisible && readerStory !== null;
+  const readerHistoryTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.history.state || window.history.state.view !== "root") {
+      window.history.replaceState({ view: "root" }, document.title);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!readerActive || !readerStory) return;
+
+    const token = `reader:${readerStory.storyId}`;
+    if (readerHistoryTokenRef.current === null) {
+      window.history.pushState({ view: "reader", storyId: readerStory.storyId }, document.title);
+      readerHistoryTokenRef.current = token;
+      return;
+    }
+
+    if (readerHistoryTokenRef.current !== token) {
+      window.history.replaceState({ view: "reader", storyId: readerStory.storyId }, document.title);
+      readerHistoryTokenRef.current = token;
+    }
+  }, [readerActive, readerStory]);
+
+  useEffect(() => {
+    if (!readerActive) {
+      readerHistoryTokenRef.current = null;
+    }
+  }, [readerActive]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handlePopState = (event: PopStateEvent) => {
+      const nextView = event.state?.view ?? "root";
+      if (readerActive && nextView !== "reader") {
+        setReaderVisible(false);
+      }
+      if (clueReaderSetId && nextView !== "clue-reader") {
+        setClueReaderSetId(null);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [readerActive, clueReaderSetId, setClueReaderSetId, setReaderVisible]);
 
   const handleSelectStory = useCallback((story: StoryEntry) => {
     console.log("[App] 选择剧情:", story.storyName);
@@ -54,8 +102,12 @@ function App() {
 
   const handleBackToList = useCallback(() => {
     console.log("[App] 返回剧情列表");
+    if (typeof window !== "undefined" && readerActive) {
+      window.history.back();
+      return;
+    }
     setReaderVisible(false);
-  }, []);
+  }, [readerActive, setReaderVisible]);
 
   const handleSearchResult = useCallback(
     (story: StoryEntry, focus: { query: string; snippet?: string | null }) => {
@@ -101,11 +153,15 @@ function App() {
   const handleTabChange = useCallback(
     (tab: Tab) => {
       if (readerActive) {
-        setReaderVisible(false);
+        if (typeof window !== "undefined") {
+          window.history.back();
+        } else {
+          setReaderVisible(false);
+        }
       }
       setActiveTab(tab);
     },
-    [readerActive]
+    [readerActive, setReaderVisible]
   );
 
   const handleReadClueSet = useCallback((setId: string) => {

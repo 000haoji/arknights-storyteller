@@ -17,10 +17,11 @@ use crate::models::{
     CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
     CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
     CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, EquipmentInfo,
-    HandbookStory, HandbookStorySection, PotentialRank, SearchDebugResponse, SearchResult,
-    SkinInfo, SkillInfo, SkillLevel, SkillSPData, StoryCategory, StoryEntry, StoryIndexStatus,
-    StorySegment, SubProfessionInfo, TalentCandidate, TalentInfo, TalentUnlockCondition,
-    TeamPowerInfo, TraitCandidate, TraitInfo, TraitUnlockCondition, VoiceLine,
+    HandbookStory, HandbookStorySection, PotentialRank, RoguelikeCharm, RoguelikeStage,
+    SearchDebugResponse, SearchResult, SkinInfo, SkillInfo, SkillLevel, SkillSPData,
+    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, SubProfessionInfo,
+    TalentCandidate, TalentInfo, TalentUnlockCondition, TeamPowerInfo, TraitCandidate,
+    TraitInfo, TraitUnlockCondition, VoiceLine,
 };
 use crate::parser::parse_story_text;
 
@@ -2813,6 +2814,284 @@ impl DataService {
 
         stories.sort_by_key(|s| s.story_sort);
         Ok(stories)
+    }
+
+    fn value_to_bool(value: Option<&Value>) -> bool {
+        match value {
+            Some(Value::Bool(flag)) => *flag,
+            Some(Value::Number(num)) => num.as_i64().unwrap_or(0) != 0,
+            _ => false,
+        }
+    }
+
+    fn stage_category_from_id(stage_id: &str) -> (Option<String>, Option<String>) {
+        let lowered = stage_id.to_ascii_lowercase();
+        let mut parts = lowered.split('_');
+        let Some(prefix) = parts.next() else {
+            return (None, None);
+        };
+        if prefix != "ro" {
+            return (None, None);
+        }
+        let segment = parts.next().unwrap_or_default();
+        match segment {
+            "n" => (Some("NORMAL".to_string()), Some("普通战斗".to_string())),
+            "e" => (Some("ELITE".to_string()), Some("精英战斗".to_string())),
+            "b" => (Some("BOSS".to_string()), Some("头目战斗".to_string())),
+            "ev" => (Some("EVENT".to_string()), Some("随机事件".to_string())),
+            "ending" => (Some("ENDING".to_string()), Some("结局".to_string())),
+            "t" => (Some("TRIAL".to_string()), Some("试炼".to_string())),
+            other if !other.is_empty() => (
+                Some(other.to_ascii_uppercase()),
+                Some(other.to_ascii_uppercase()),
+            ),
+            _ => (None, None),
+        }
+    }
+
+    fn stage_category_sort_key(category: Option<&str>) -> i32 {
+        match category {
+            Some("NORMAL") => 0,
+            Some("ELITE") => 1,
+            Some("BOSS") => 2,
+            Some("EVENT") => 3,
+            Some("ENDING") => 4,
+            Some("TRIAL") => 5,
+            _ => 6,
+        }
+    }
+
+    fn theme_from_level_id(level_id: &str) -> (Option<String>, Option<String>) {
+        let lower = level_id.to_ascii_lowercase();
+        let last = lower.split('/').last().unwrap_or(&lower);
+        let trimmed = last.strip_prefix("level_").unwrap_or(last);
+        let theme_part = trimmed.split('-').next().unwrap_or(trimmed);
+        if theme_part.is_empty() {
+            return (None, None);
+        }
+        let key = theme_part.to_string();
+        let label = theme_part
+            .split('_')
+            .map(|s| {
+                if s.is_empty() {
+                    s.to_string()
+                } else {
+                    let mut chars = s.chars();
+                    match chars.next() {
+                        Some(first) if first.is_ascii_alphabetic() => {
+                            let mut out = String::new();
+                            out.push(first.to_ascii_uppercase());
+                            out.extend(chars.map(|c| c.to_ascii_lowercase()));
+                            out
+                        }
+                        Some(first) => {
+                            let mut out = String::new();
+                            out.push(first);
+                            out.extend(chars);
+                            out
+                        }
+                        None => String::new(),
+                    }
+                }
+            })
+            .collect::<Vec<String>>()
+            .join(" ");
+        let label = if label.is_empty() {
+            key.to_ascii_uppercase()
+        } else {
+            label.to_ascii_uppercase()
+        };
+        (Some(key), Some(label))
+    }
+
+    /// 获取肉鸽符文道具
+    pub fn get_roguelike_charms(&self) -> Result<Vec<RoguelikeCharm>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let charm_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/charm_table.json");
+        let content = fs::read_to_string(&charm_file)
+            .map_err(|e| format!("Failed to read charm table: {}", e))?;
+        let root: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse charm table: {}", e))?;
+
+        let Some(list) = root.get("charmList").and_then(|v| v.as_array()) else {
+            return Ok(Vec::new());
+        };
+
+        let mut charms = Vec::new();
+
+        for entry in list {
+            let take_str = |key: &str| {
+                entry
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            };
+
+            let Some(id) = take_str("id") else {
+                continue;
+            };
+            let Some(name) = take_str("name") else {
+                continue;
+            };
+            let sort = entry
+                .get("sort")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+                .clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+
+            let obtain_in_random = entry
+                .get("obtainInRandom")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
+            let drop_stage_ids = entry
+                .get("dropStages")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| item.as_str())
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_else(Vec::new);
+
+            let rune_data = entry.get("runeData").and_then(|v| v.as_object());
+            let rune_description = rune_data
+                .and_then(|obj| obj.get("description"))
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let rune_points = rune_data
+                .and_then(|obj| obj.get("points"))
+                .and_then(|v| v.as_f64())
+                .map(|f| f as f32);
+
+            charms.push(RoguelikeCharm {
+                id,
+                name,
+                sort,
+                icon: take_str("icon"),
+                rarity: take_str("rarity"),
+                charm_type: take_str("charmType"),
+                price: entry.get("price").and_then(|v| v.as_i64()).map(|n| {
+                    n.clamp(i32::MIN as i64, i32::MAX as i64) as i32
+                }),
+                obtain_in_random,
+                item_usage: take_str("itemUsage"),
+                item_description: take_str("itemDesc"),
+                short_description: take_str("desc"),
+                obtain_approach: take_str("itemObtainApproach"),
+                special_obtain_approach: take_str("specialObtainApproach"),
+                rune_description,
+                rune_points,
+                drop_stage_ids,
+            });
+        }
+
+        charms.sort_by(|a, b| {
+            a.sort
+                .cmp(&b.sort)
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.id.cmp(&b.id))
+        });
+
+        Ok(charms)
+    }
+
+    /// 获取肉鸽场景/关卡信息
+    pub fn get_roguelike_stages(&self) -> Result<Vec<RoguelikeStage>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let table_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/roguelike_table.json");
+        let content = fs::read_to_string(&table_file)
+            .map_err(|e| format!("Failed to read roguelike table: {}", e))?;
+        let root: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse roguelike table: {}", e))?;
+
+        let Some(stages_obj) = root.get("stages").and_then(|v| v.as_object()) else {
+            return Ok(Vec::new());
+        };
+
+        let mut stages = Vec::new();
+
+        for (stage_id, value) in stages_obj {
+            let take_str = |key: &str| {
+                value
+                    .get(key)
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            };
+
+            let id = take_str("id").unwrap_or_else(|| stage_id.to_string());
+            let Some(name) = take_str("name") else {
+                continue;
+            };
+
+            let level_id = take_str("levelId");
+            let (theme_key, theme_label) = match level_id.as_deref() {
+                Some(level_id) => Self::theme_from_level_id(level_id),
+                None => (None, None),
+            };
+            let (category, category_label) = Self::stage_category_from_id(&id);
+
+            let is_boss = Self::value_to_bool(value.get("isBoss"));
+            let is_elite = Self::value_to_bool(value.get("isElite"));
+
+            stages.push(RoguelikeStage {
+                id,
+                name,
+                code: take_str("code"),
+                description: take_str("description"),
+                elite_description: take_str("eliteDesc"),
+                difficulty: take_str("difficulty"),
+                is_boss,
+                is_elite,
+                level_id,
+                theme_key,
+                theme_label,
+                category,
+                category_label,
+                loading_pic_id: take_str("loadingPicId"),
+            });
+        }
+
+        stages.sort_by(|a, b| {
+            let theme_cmp = match (a.theme_key.as_deref(), b.theme_key.as_deref()) {
+                (Some(a_theme), Some(b_theme)) => compare_story_group_ids(a_theme, b_theme),
+                (Some(_), None) => Ordering::Less,
+                (None, Some(_)) => Ordering::Greater,
+                (None, None) => Ordering::Equal,
+            };
+            if theme_cmp != Ordering::Equal {
+                return theme_cmp;
+            }
+
+            let category_cmp = Self::stage_category_sort_key(a.category.as_deref())
+                .cmp(&Self::stage_category_sort_key(b.category.as_deref()));
+            if category_cmp != Ordering::Equal {
+                return category_cmp;
+            }
+
+            compare_story_group_ids(&a.id, &b.id)
+        });
+
+        Ok(stages)
     }
 
     /// 获取所有干员基础信息

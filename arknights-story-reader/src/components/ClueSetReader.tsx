@@ -18,13 +18,16 @@ interface ClueSetReaderProps {
 
 interface RenderItem {
   key: string;
-  story: StoryEntry;
+  storyId: string;
+  story: StoryEntry | null;
   segmentIndex: number;
   segment?: StorySegment | null;
   preview?: string;
   digestHex?: string;
   resolvedIndex?: number | null;
 }
+
+const normalizeStoryId = (id: string) => id.trim();
 
 function processSegments(content: ParsedStoryContent): StorySegment[] {
   const cleaned = content.segments.flatMap<StorySegment>((segment) => {
@@ -146,7 +149,13 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
       } catch {}
 
       if (!set || set.items.length === 0) return;
-      const storyIds = Array.from(new Set(set.items.map((it) => it.storyId)));
+      const storyIds = Array.from(
+        new Set(
+          set.items
+            .map((it) => normalizeStoryId(it.storyId))
+            .filter((sid): sid is string => sid.length > 0)
+        )
+      );
       const entries: Record<string, StoryEntry> = {};
       for (const sid of storyIds) {
         try {
@@ -170,8 +179,9 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
       }
       if (cancelled) return;
       const renderItems: RenderItem[] = set.items.map((it, index) => {
-        const story = entries[it.storyId];
-        const arr = segs[it.storyId] ?? [];
+        const sid = normalizeStoryId(it.storyId);
+        const story = sid ? entries[sid] : undefined;
+        const arr = sid ? segs[sid] ?? [] : [];
         let seg: StorySegment | null | undefined = arr[it.segmentIndex];
         let resolvedIndex: number | null = it.segmentIndex;
         // 若索引不准，使用摘要或预览回退
@@ -199,9 +209,11 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
             }
           }
         }
+        const fallbackId = sid || it.storyId || "unknown";
         return {
-          key: `${it.storyId}-${index}`,
-          story: story as any,
+          key: `${fallbackId}-${index}`,
+          storyId: fallbackId,
+          story: story ?? null,
           segmentIndex: it.segmentIndex,
           segment: seg ?? null,
           preview: it.preview,
@@ -219,16 +231,20 @@ export function ClueSetReader({ setId, onClose, onOpenStoryJump }: ClueSetReader
   // 分组：保持“第一次出现”的关卡顺序，组内维持线索集原有顺序
   const groups = useMemo(() => {
     const order: string[] = [];
-    const map = new Map<string, { story?: StoryEntry; items: RenderItem[] }>();
+    const map = new Map<string, { story: StoryEntry | null; items: RenderItem[] }>();
     for (const it of items) {
-      const sid = it.story?.storyId || ('' + (it as any).storyId) || 'unknown';
-      if (!map.has(sid)) {
-        map.set(sid, { story: it.story, items: [] });
+      const sid = it.storyId || "unknown";
+      let entry = map.get(sid);
+      if (!entry) {
+        entry = { story: it.story ?? null, items: [] };
+        map.set(sid, entry);
         order.push(sid);
+      } else if (!entry.story && it.story) {
+        entry.story = it.story;
       }
-      map.get(sid)!.items.push(it);
+      entry.items.push(it);
     }
-    return order.map((sid) => ({ storyId: sid, story: map.get(sid)!.story, items: map.get(sid)!.items }));
+    return order.map((sid) => ({ storyId: sid, story: map.get(sid)!.story ?? null, items: map.get(sid)!.items }));
   }, [items]);
 
   // progress for scroll mode

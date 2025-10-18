@@ -55,6 +55,31 @@ const DEFAULT_SET_ID_KEY = "arknights-default-clue-set-id";
 
 const ClueSetsContext = createContext<ClueSetsContextValue | null>(null);
 
+type ClueItemInput = Omit<ClueItem, "createdAt"> & { createdAt?: number };
+
+function normalizeStoryId(storyId: string): string {
+  return storyId.trim();
+}
+
+function normalizeClueItem(input: ClueItemInput): ClueItem | null {
+  const storyId = normalizeStoryId(input.storyId ?? "");
+  if (!storyId) return null;
+  const rawSegment = Number(input.segmentIndex);
+  if (!Number.isFinite(rawSegment)) return null;
+  const createdAt = Number.isFinite(input.createdAt) ? Number(input.createdAt) : Date.now();
+  const preview =
+    typeof input.preview === "string" && input.preview.length > 0 ? input.preview : undefined;
+  const digestHex =
+    typeof input.digestHex === "string" && input.digestHex.length > 0 ? input.digestHex : undefined;
+  return {
+    storyId,
+    segmentIndex: rawSegment | 0,
+    createdAt: createdAt | 0,
+    preview,
+    digestHex,
+  };
+}
+
 function readStorage(): ClueSetsState {
   if (typeof window === "undefined") return { sets: {} };
   try {
@@ -66,13 +91,21 @@ function readStorage(): ClueSetsState {
     for (const [id, value] of Object.entries((parsed as any).sets ?? {})) {
       if (!value || typeof value !== "object") continue;
       const v = value as Partial<ClueSet>;
-      const items = Array.isArray(v.items) ? v.items.filter(Boolean).map((it) => ({
-        storyId: String((it as any).storyId ?? ""),
-        segmentIndex: Number((it as any).segmentIndex ?? 0) | 0,
-        createdAt: Number((it as any).createdAt ?? Date.now()) | 0,
-        preview: typeof (it as any).preview === "string" ? (it as any).preview : undefined,
-        digestHex: typeof (it as any).digestHex === "string" ? (it as any).digestHex : undefined,
-      })) : [];
+      const items = Array.isArray(v.items)
+        ? v.items
+            .filter(Boolean)
+            .map((it) =>
+              normalizeClueItem({
+                storyId: String((it as any).storyId ?? ""),
+                segmentIndex: Number((it as any).segmentIndex ?? 0),
+                createdAt: Number((it as any).createdAt ?? Date.now()),
+                preview: typeof (it as any).preview === "string" ? (it as any).preview : undefined,
+                digestHex:
+                  typeof (it as any).digestHex === "string" ? (it as any).digestHex : undefined,
+              })
+            )
+            .filter((it): it is ClueItem => Boolean(it))
+        : [];
       if (!v.id || !v.title) continue;
       sets[id] = {
         id: String(v.id),
@@ -170,15 +203,22 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback(
     (setId: string, item: Omit<ClueItem, "createdAt"> & { createdAt?: number }) => {
-      const createdAt = item.createdAt ?? Date.now();
       setState((prev) => {
         const set = prev.sets[setId];
         if (!set) return prev;
-        const exists = set.items.some((it) => it.storyId === item.storyId && it.segmentIndex === item.segmentIndex);
+        const normalized = normalizeClueItem(item);
+        if (!normalized) return prev;
+        const exists = set.items.some(
+          (it) => it.storyId === normalized.storyId && it.segmentIndex === normalized.segmentIndex
+        );
         if (exists) {
           return { sets: { ...prev.sets, [setId]: { ...set, updatedAt: Date.now() } } };
         }
-        const next: ClueSet = { ...set, items: [...set.items, { ...item, createdAt }], updatedAt: Date.now() };
+        const next: ClueSet = {
+          ...set,
+          items: [...set.items, normalized],
+          updatedAt: Date.now(),
+        };
         return { sets: { ...prev.sets, [setId]: next } };
       });
     },
@@ -193,10 +233,12 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
         const seen = new Set(set.items.map((it) => `${it.storyId}#${it.segmentIndex}`));
         const toAdd: ClueItem[] = [];
         for (const it of items) {
-          const key = `${it.storyId}#${it.segmentIndex}`;
+          const normalized = normalizeClueItem(it);
+          if (!normalized) continue;
+          const key = `${normalized.storyId}#${normalized.segmentIndex}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          toAdd.push({ ...it, createdAt: it.createdAt ?? Date.now() });
+          toAdd.push(normalized);
         }
         if (toAdd.length === 0) return prev;
         const next: ClueSet = { ...set, items: [...set.items, ...toAdd], updatedAt: Date.now() };
@@ -207,10 +249,14 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
   );
 
   const removeItem = useCallback((setId: string, storyId: string, segmentIndex: number) => {
+    const targetId = normalizeStoryId(storyId);
+    if (!targetId) return;
     setState((prev) => {
       const set = prev.sets[setId];
       if (!set) return prev;
-      const nextItems = set.items.filter((it) => !(it.storyId === storyId && it.segmentIndex === segmentIndex));
+      const nextItems = set.items.filter(
+        (it) => !(it.storyId === targetId && it.segmentIndex === segmentIndex)
+      );
       return { sets: { ...prev.sets, [setId]: { ...set, items: nextItems, updatedAt: Date.now() } } };
     });
   }, []);
@@ -231,17 +277,43 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
     setState((prev) => {
       const set = prev.sets[setId];
       if (!set) return prev;
-      return { sets: { ...prev.sets, [setId]: { ...set, items: [...items], updatedAt: Date.now() } } };
+      const normalized = items
+        .map((it) =>
+          normalizeClueItem({
+            storyId: it.storyId,
+            segmentIndex: it.segmentIndex,
+            createdAt: it.createdAt,
+            preview: it.preview,
+            digestHex: it.digestHex,
+          })
+        )
+        .filter((it): it is ClueItem => Boolean(it));
+      return {
+        sets: {
+          ...prev.sets,
+          [setId]: { ...set, items: normalized, updatedAt: Date.now() },
+        },
+      };
     });
   }, []);
 
   const updateItemMeta = useCallback(
     (setId: string, storyId: string, segmentIndex: number, meta: Partial<Pick<ClueItem, "preview" | "digestHex">>) => {
+      const targetId = normalizeStoryId(storyId);
+      if (!targetId) return;
+      const sanitizedMeta: Partial<Pick<ClueItem, "preview" | "digestHex">> = {
+        preview:
+          typeof meta.preview === "string" && meta.preview.length > 0 ? meta.preview : undefined,
+        digestHex:
+          typeof meta.digestHex === "string" && meta.digestHex.length > 0
+            ? meta.digestHex.trim()
+            : undefined,
+      };
       setState((prev) => {
         const set = prev.sets[setId];
         if (!set) return prev;
         const items = set.items.map((it) =>
-          it.storyId === storyId && it.segmentIndex === segmentIndex ? { ...it, ...meta } : it
+          it.storyId === targetId && it.segmentIndex === segmentIndex ? { ...it, ...sanitizedMeta } : it
         );
         return { sets: { ...prev.sets, [setId]: { ...set, items, updatedAt: Date.now() } } };
       });
@@ -285,12 +357,18 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
   const importShareCode = useCallback(async (code: string, opts?: { targetSetId?: string; createIfMissing?: boolean; titleIfCreate?: string }): Promise<ImportResult> => {
     const payload = await parseShareCode(code);
     const { stories, items } = payload;
-    const importedItems: Array<Omit<ClueItem, "createdAt"> & { createdAt?: number }> = items.map((ref) => ({
-      storyId: stories[ref.storyIndex],
-      segmentIndex: ref.segmentIndex,
-      digestHex: digestToHex64(ref.digest64),
-      preview: undefined,
-    }));
+    const importedItems: Array<Omit<ClueItem, "createdAt"> & { createdAt?: number }> = items
+      .map((ref) => {
+        const storyId = normalizeStoryId(stories[ref.storyIndex] ?? "");
+        if (!storyId) return null;
+        return {
+          storyId,
+          segmentIndex: Number(ref.segmentIndex) | 0,
+          digestHex: digestToHex64(ref.digest64),
+          preview: undefined,
+        };
+      })
+      .filter((it): it is Omit<ClueItem, "createdAt"> & { createdAt?: number } => Boolean(it));
 
     let setId = opts?.targetSetId;
     let created = false;
@@ -304,9 +382,13 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
     }
 
     // compute how many will be added (dedupe against existing)
-    const existingKeys = new Set((state.sets[setId!]?.items ?? []).map((it) => `${it.storyId}#${it.segmentIndex}`));
+    const existingKeys = new Set(
+      (state.sets[setId!]?.items ?? []).map((it) => `${it.storyId}#${it.segmentIndex}`)
+    );
     const uniqueToAdd = importedItems.filter((it) => {
-      const k = `${it.storyId}#${it.segmentIndex}`;
+      const normalized = normalizeClueItem(it);
+      if (!normalized) return false;
+      const k = `${normalized.storyId}#${normalized.segmentIndex}`;
       if (existingKeys.has(k)) return false;
       existingKeys.add(k);
       return true;

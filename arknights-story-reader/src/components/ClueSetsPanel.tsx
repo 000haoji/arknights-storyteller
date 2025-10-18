@@ -15,6 +15,8 @@ interface ClueSetsPanelProps {
   onReadSet?: (setId: string) => void;
 }
 
+const normalizeStoryId = (id: string) => id.trim();
+
 export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps) {
   const { sets, createSet, deleteSet, renameSet, removeItem, setItems, exportShareCode, importShareCode, updateItemMeta } = useClueSets();
   const [importCode, setImportCode] = useState("");
@@ -30,7 +32,12 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
 
   const allStoryIds = useMemo(() => {
     const ids = new Set<string>();
-    Object.values(sets).forEach((s) => s.items.forEach((it) => ids.add(it.storyId)));
+    Object.values(sets).forEach((s) =>
+      s.items.forEach((it) => {
+        const sid = normalizeStoryId(it.storyId);
+        if (sid) ids.add(sid);
+      })
+    );
     return Array.from(ids);
   }, [sets]);
 
@@ -114,8 +121,14 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
 
   const handleOpen = async (storyId: string, segmentIndex: number, digestHex?: string, preview?: string) => {
     try {
-      const story = storyCache[storyId] ?? (await api.getStoryEntry(storyId));
+      const normalizedId = normalizeStoryId(storyId);
+      if (!normalizedId) throw new Error("剧情不存在");
+      const cached = storyCache[normalizedId];
+      const story = cached ?? (await api.getStoryEntry(normalizedId));
       if (!story) throw new Error("剧情不存在");
+      if (!cached) {
+        setStoryCache((prev) => (prev[normalizedId] ? prev : { ...prev, [normalizedId]: story }));
+      }
       onOpenStoryJump(story, { segmentIndex, digestHex, preview });
     } catch (err) {
       console.error(err);
@@ -134,7 +147,10 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
       const tasks: Task[] = [];
       for (const s of sortedSets) {
         for (const it of s.items) {
-          if (!it.preview) tasks.push({ setId: s.id, storyId: it.storyId, segmentIndex: it.segmentIndex });
+          if (it.preview) continue;
+          const sid = normalizeStoryId(it.storyId);
+          if (!sid) continue;
+          tasks.push({ setId: s.id, storyId: sid, segmentIndex: it.segmentIndex });
         }
       }
       if (tasks.length === 0) return;
@@ -148,9 +164,12 @@ export function ClueSetsPanel({ onOpenStoryJump, onReadSet }: ClueSetsPanelProps
       for (const [sid, bucket] of groups) {
         if (cancelled) break;
         try {
-          const entry = storyCache[sid] ?? (await api.getStoryEntry(sid));
+          const cached = storyCache[sid];
+          const entry = cached ?? (await api.getStoryEntry(sid));
           if (!entry) continue;
-          if (!storyCache[sid]) setStoryCache((prev) => ({ ...prev, [sid]: entry }));
+          if (!cached) {
+            setStoryCache((prev) => (prev[sid] ? prev : { ...prev, [sid]: entry }));
+          }
           const content = await api.getStoryContent(entry.storyTxt);
           // process segments similar to StoryReader
           const cleaned = content.segments.flatMap((segment: any) => {

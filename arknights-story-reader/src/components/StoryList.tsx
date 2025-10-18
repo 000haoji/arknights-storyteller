@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api } from "@/services/api";
-import type { StoryEntry } from "@/types/story";
+import type { RoguelikeCharm, RoguelikeStage, StoryEntry } from "@/types/story";
 import { Button } from "@/components/ui/button";
 import { BookOpen, RefreshCw, Star, FileText } from "lucide-react";
 import { SyncDialog } from "@/components/SyncDialog";
@@ -16,17 +16,33 @@ const CATEGORY_TABS = [
   { id: "activity" as const, label: "活动剧情" },
   { id: "sidestory" as const, label: "支线" },
   { id: "roguelike" as const, label: "肉鸽" },
+  { id: "rogueCharm" as const, label: "肉鸽道具" },
+  { id: "rogueStage" as const, label: "肉鸽场景" },
   { id: "memory" as const, label: "干员密录" },
   { id: "record" as const, label: "主线笔记" },
   { id: "rune" as const, label: "危机合约" },
 ];
 
-const CATEGORY_DESCRIPTIONS: Record<"favorites" | "main" | "activity" | "sidestory" | "roguelike" | "memory" | "record" | "rune", string> = {
+const CATEGORY_DESCRIPTIONS: Record<
+  | "favorites"
+  | "main"
+  | "activity"
+  | "sidestory"
+  | "roguelike"
+  | "rogueCharm"
+  | "rogueStage"
+  | "memory"
+  | "record"
+  | "rune",
+  string
+> = {
   favorites: "收藏喜爱的章节或关卡",
   main: "主线章节",
   activity: "活动剧情列表",
   sidestory: "支线故事",
   roguelike: "肉鸽模式剧情",
+  rogueCharm: "肉鸽模式符文道具",
+  rogueStage: "肉鸽模式战斗场景与事件",
   memory: "干员密录故事",
   record: "主线章节笔记与日志",
   rune: "危机合约剧情",
@@ -41,7 +57,18 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<'favorites' | 'main' | 'activity' | 'sidestory' | 'roguelike' | 'memory' | 'record' | 'rune'>('main');
+  const [activeCategory, setActiveCategory] = useState<
+    | 'favorites'
+    | 'main'
+    | 'activity'
+    | 'sidestory'
+    | 'roguelike'
+    | 'rogueCharm'
+    | 'rogueStage'
+    | 'memory'
+    | 'record'
+    | 'rune'
+  >('main');
   const [activityGrouped, setActivityGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityLoaded, setActivityLoaded] = useState(false);
@@ -51,6 +78,12 @@ export function StoryList({ onSelectStory }: StoryListProps) {
   const [roguelikeGrouped, setRoguelikeGrouped] = useState<Array<[string, StoryEntry[]]>>([]);
   const [roguelikeLoading, setRoguelikeLoading] = useState(false);
   const [roguelikeLoaded, setRoguelikeLoaded] = useState(false);
+  const [roguelikeCharms, setRoguelikeCharms] = useState<RoguelikeCharm[]>([]);
+  const [roguelikeCharmsLoading, setRoguelikeCharmsLoading] = useState(false);
+  const [roguelikeCharmsLoaded, setRoguelikeCharmsLoaded] = useState(false);
+  const [roguelikeStages, setRoguelikeStages] = useState<RoguelikeStage[]>([]);
+  const [roguelikeStagesLoading, setRoguelikeStagesLoading] = useState(false);
+  const [roguelikeStagesLoaded, setRoguelikeStagesLoaded] = useState(false);
   const [memoryStories, setMemoryStories] = useState<StoryEntry[]>([]);
   const [memoryLoading, setMemoryLoading] = useState(false);
   const [memoryLoaded, setMemoryLoaded] = useState(false);
@@ -113,6 +146,14 @@ export function StoryList({ onSelectStory }: StoryListProps) {
     [favoriteGroups]
   );
 
+  const roguelikeStageMap = useMemo(() => {
+    const map = new Map<string, RoguelikeStage>();
+    roguelikeStages.forEach((stage) => {
+      map.set(stage.id, stage);
+    });
+    return map;
+  }, [roguelikeStages]);
+
   const trimmedSearch = searchTerm.trim();
   const normalizedSearch = trimmedSearch.toLowerCase();
   const hasSearch = normalizedSearch.length > 0;
@@ -124,6 +165,57 @@ export function StoryList({ onSelectStory }: StoryListProps) {
         story.storyName,
         story.storyCode ?? "",
         story.storyGroup ?? "",
+      ];
+      return fields.some((value) =>
+        value.toLowerCase().includes(normalizedSearch)
+      );
+    },
+    [hasSearch, normalizedSearch]
+  );
+
+  const matchesCharmSearch = useCallback(
+    (charm: RoguelikeCharm) => {
+      if (!hasSearch) return true;
+      const stageTexts = charm.dropStageIds
+        .map((id) => roguelikeStageMap.get(id))
+        .filter((stage): stage is RoguelikeStage => Boolean(stage))
+        .flatMap((stage) => [
+          stage.name,
+          stage.themeLabel ?? "",
+          stage.categoryLabel ?? "",
+          stage.code ?? "",
+        ]);
+      const fields = [
+        charm.name,
+        charm.shortDescription ?? "",
+        charm.itemDescription ?? "",
+        charm.itemUsage ?? "",
+        charm.obtainApproach ?? "",
+        charm.specialObtainApproach ?? "",
+        charm.charmType ?? "",
+        charm.rarity ?? "",
+        charm.dropStageIds.join(" "),
+        ...stageTexts,
+      ];
+      return fields.some((value) =>
+        value.toLowerCase().includes(normalizedSearch)
+      );
+    },
+    [hasSearch, normalizedSearch, roguelikeStageMap]
+  );
+
+  const matchesStageSearch = useCallback(
+    (stage: RoguelikeStage) => {
+      if (!hasSearch) return true;
+      const fields = [
+        stage.name,
+        stage.description ?? "",
+        stage.eliteDescription ?? "",
+        stage.categoryLabel ?? "",
+        stage.themeLabel ?? "",
+        stage.code ?? "",
+        stage.difficulty ?? "",
+        stage.id,
       ];
       return fields.some((value) =>
         value.toLowerCase().includes(normalizedSearch)
@@ -223,6 +315,36 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       })
       .filter(([, stories]) => stories.length > 0);
   }, [roguelikeGrouped, hasSearch, matchesSearch, normalizedSearch]);
+
+  const filteredRoguelikeCharms = useMemo(() => {
+    if (!hasSearch) return roguelikeCharms;
+    return roguelikeCharms.filter(matchesCharmSearch);
+  }, [hasSearch, matchesCharmSearch, roguelikeCharms]);
+
+  const filteredRoguelikeStages = useMemo(() => {
+    if (!hasSearch) return roguelikeStages;
+    return roguelikeStages.filter(matchesStageSearch);
+  }, [hasSearch, matchesStageSearch, roguelikeStages]);
+
+  const groupedRoguelikeStages = useMemo(() => {
+    if (filteredRoguelikeStages.length === 0) return [] as Array<[string, RoguelikeStage[]]>;
+    const orderedThemes: string[] = [];
+    const themeMap = new Map<string, RoguelikeStage[]>();
+
+    filteredRoguelikeStages.forEach((stage) => {
+      const themeLabel = stage.themeLabel ?? "其他主题";
+      if (!themeMap.has(themeLabel)) {
+        themeMap.set(themeLabel, []);
+        orderedThemes.push(themeLabel);
+      }
+      themeMap.get(themeLabel)!.push(stage);
+    });
+
+    return orderedThemes.map((themeLabel) => [
+      themeLabel,
+      themeMap.get(themeLabel)!,
+    ] as [string, RoguelikeStage[]]);
+  }, [filteredRoguelikeStages]);
 
   const filteredMemoryStories = useMemo(() => {
     if (!hasSearch) return memoryStories;
@@ -462,6 +584,12 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       void loadSidestories();
     } else if (activeCategory === 'roguelike') {
       void loadRoguelike();
+    } else if (activeCategory === 'rogueCharm') {
+      void loadRoguelikeCharms();
+    } else if (activeCategory === 'rogueStage') {
+      void loadRoguelikeStages();
+    } else if (activeCategory === 'memory') {
+      void loadMemories();
     } else if (activeCategory === 'record') {
       void loadRecord();
     } else if (activeCategory === 'rune') {
@@ -526,6 +654,82 @@ export function StoryList({ onSelectStory }: StoryListProps) {
       }
     } finally {
       setRoguelikeLoading(false);
+    }
+  };
+
+  const loadRoguelikeStages = async () => {
+    if (roguelikeStagesLoaded) return;
+    console.log("[StoryList] 开始加载肉鸽场景信息");
+    try {
+      setRoguelikeStagesLoading(true);
+      setError(null);
+
+      const withTimeout = async <T,>(promise: Promise<T>, ms = 30000) => {
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("TIMEOUT")), ms);
+        });
+        return Promise.race([promise, timeout]);
+      };
+
+      const stages = await withTimeout(api.getRoguelikeStages());
+      console.log("[StoryList] 肉鸽场景数:", stages.length);
+      setRoguelikeStages(stages);
+      setRoguelikeStagesLoaded(true);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载肉鸽场景失败:", errorMsg, err);
+      if (
+        errorMsg.includes("NOT_INSTALLED") ||
+        errorMsg.includes("No such file") ||
+        errorMsg === "TIMEOUT"
+      ) {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setRoguelikeStagesLoading(false);
+    }
+  };
+
+  const loadRoguelikeCharms = async () => {
+    if (roguelikeCharmsLoaded) return;
+    console.log("[StoryList] 开始加载肉鸽符文道具");
+    try {
+      setRoguelikeCharmsLoading(true);
+      setError(null);
+
+      const withTimeout = async <T,>(promise: Promise<T>, ms = 30000) => {
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error("TIMEOUT")), ms);
+        });
+        return Promise.race([promise, timeout]);
+      };
+
+      const charms = await withTimeout(api.getRoguelikeCharms());
+      console.log("[StoryList] 肉鸽符文道具数:", charms.length);
+      setRoguelikeCharms(charms);
+      setRoguelikeCharmsLoaded(true);
+
+      if (!roguelikeStagesLoaded && !roguelikeStagesLoading) {
+        void loadRoguelikeStages();
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "加载失败";
+      console.error("[StoryList] 加载肉鸽符文道具失败:", errorMsg, err);
+      if (
+        errorMsg.includes("NOT_INSTALLED") ||
+        errorMsg.includes("No such file") ||
+        errorMsg === "TIMEOUT"
+      ) {
+        setError("未安装或网络缓慢，请先同步数据");
+        setSyncDialogOpen(true);
+      } else {
+        setError("加载失败");
+      }
+    } finally {
+      setRoguelikeCharmsLoading(false);
     }
   };
 
@@ -711,8 +915,8 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                   type="search"
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
-                  placeholder="搜索剧情标题或编号"
-                  aria-label="搜索剧情标题或编号"
+                  placeholder="搜索剧情、道具或场景"
+                  aria-label="搜索剧情、道具或场景"
                   className="w-full sm:w-80 md:w-96"
                 />
               </div>
@@ -924,6 +1128,52 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                               onRequestSummary={handleRequestSummary}
                             />
                           ))}
+                        </Collapsible>
+                      );
+                    })}
+                </div>
+              )}
+
+              {activeCategory === "rogueCharm" && (
+                <div className="space-y-3">
+                  {roguelikeCharmsLoading && <EmptyState message="肉鸽道具加载中..." />}
+                  {!roguelikeCharmsLoading && filteredRoguelikeCharms.length === 0 && (
+                    <EmptyState
+                      message={hasSearch ? "没有匹配的肉鸽道具" : "暂无肉鸽道具或需要同步"}
+                    />
+                  )}
+                  {!roguelikeCharmsLoading &&
+                    filteredRoguelikeCharms.map((charm) => (
+                      <RoguelikeCharmItem
+                        key={charm.id}
+                        charm={charm}
+                        stageMap={roguelikeStageMap}
+                      />
+                    ))}
+                </div>
+              )}
+
+              {activeCategory === "rogueStage" && (
+                <div className="space-y-3">
+                  {roguelikeStagesLoading && <EmptyState message="肉鸽场景加载中..." />}
+                  {!roguelikeStagesLoading && groupedRoguelikeStages.length === 0 && (
+                    <EmptyState
+                      message={hasSearch ? "没有匹配的肉鸽场景" : "暂无肉鸽场景或需要同步"}
+                    />
+                  )}
+                  {!roguelikeStagesLoading &&
+                    groupedRoguelikeStages.map(([themeLabel, stages], index) => {
+                      const themeKey = stages[0]?.themeKey
+                        ? stages[0].themeKey!.toUpperCase()
+                        : undefined;
+                      const title = themeKey ? `${themeLabel} (${themeKey})` : themeLabel;
+                      return (
+                        <Collapsible key={`rogue-stages-${index}`} title={title} defaultOpen={index === 0}>
+                          <div className="space-y-2">
+                            {stages.map((stage) => (
+                              <RoguelikeStageItem key={stage.id} stage={stage} />
+                            ))}
+                          </div>
                         </Collapsible>
                       );
                     })}
@@ -1164,6 +1414,190 @@ function SummaryToggleButton({
         {enabled ? "ON" : "OFF"}
       </span>
     </button>
+  );
+}
+
+function InfoBadge({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-[hsl(var(--color-muted-foreground))]">
+      {children}
+    </span>
+  );
+}
+
+function sanitizeRichText(text: string): string {
+  return text.replace(/<[^>]+>/g, "").replace(/\r\n/g, "\n").trim();
+}
+
+function InfoSection({ title, text }: { title: string; text: string }) {
+  if (!text.trim()) return null;
+  return (
+    <div className="mt-3 space-y-1">
+      <div className="text-xs font-medium text-[hsl(var(--color-muted-foreground))]">
+        {title}
+      </div>
+      <div className="text-sm leading-relaxed text-[hsl(var(--color-foreground))] whitespace-pre-line">
+        {text}
+      </div>
+    </div>
+  );
+}
+
+function RoguelikeCharmItem({
+  charm,
+  stageMap,
+}: {
+  charm: RoguelikeCharm;
+  stageMap: Map<string, RoguelikeStage>;
+}) {
+  const shortDescription = charm.shortDescription
+    ? sanitizeRichText(charm.shortDescription)
+    : null;
+
+  const sections: Array<{ title: string; text: string }> = [];
+
+  if (charm.itemDescription) {
+    sections.push({
+      title: "物品说明",
+      text: sanitizeRichText(charm.itemDescription),
+    });
+  }
+
+  if (charm.itemUsage) {
+    sections.push({
+      title: "用途",
+      text: sanitizeRichText(charm.itemUsage),
+    });
+  }
+
+  if (charm.runeDescription) {
+    sections.push({
+      title: "符文效果",
+      text: sanitizeRichText(charm.runeDescription),
+    });
+  }
+
+  if (charm.dropStageIds.length > 0) {
+    const dropText = charm.dropStageIds
+      .map((id) => {
+        const stage = stageMap.get(id);
+        if (!stage) {
+          return id;
+        }
+        const theme = stage.themeLabel ?? stage.themeKey ?? "";
+        const badge = theme ? `｜${theme}` : "";
+        return `${stage.name}（${id}${badge}）`;
+      })
+      .join("\n");
+    sections.push({
+      title: "掉落关卡",
+      text: dropText,
+    });
+  }
+
+  if (charm.obtainApproach) {
+    sections.push({
+      title: "获取方式",
+      text: sanitizeRichText(charm.obtainApproach),
+    });
+  }
+
+  if (charm.specialObtainApproach) {
+    sections.push({
+      title: "特殊获取",
+      text: sanitizeRichText(charm.specialObtainApproach),
+    });
+  }
+
+  const resourceLines: string[] = [];
+  if (charm.icon) {
+    resourceLines.push(`图标: ${charm.icon}`);
+  }
+  if (resourceLines.length > 0) {
+    sections.push({
+      title: "资源",
+      text: resourceLines.join("\n"),
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold leading-tight">{charm.name}</h3>
+          <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+            ID: {charm.id}
+          </div>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <InfoBadge>排序: {charm.sort}</InfoBadge>
+          {charm.charmType && <InfoBadge>类型: {charm.charmType}</InfoBadge>}
+          {charm.rarity && <InfoBadge>稀有: {charm.rarity}</InfoBadge>}
+          {typeof charm.price === "number" && (
+            <InfoBadge>价格: {charm.price}</InfoBadge>
+          )}
+          {typeof charm.runePoints === "number" && (
+            <InfoBadge>积分: {charm.runePoints}</InfoBadge>
+          )}
+          {charm.obtainInRandom && <InfoBadge>随机获取</InfoBadge>}
+        </div>
+      </div>
+
+      {shortDescription && (
+        <p className="mt-3 text-sm leading-relaxed text-[hsl(var(--color-foreground))] whitespace-pre-line">
+          {shortDescription}
+        </p>
+      )}
+
+      {sections.map(({ title, text }) => (
+        <InfoSection key={title} title={title} text={text} />
+      ))}
+    </div>
+  );
+}
+
+function RoguelikeStageItem({ stage }: { stage: RoguelikeStage }) {
+  const description = stage.description
+    ? sanitizeRichText(stage.description)
+    : null;
+  const eliteDescription = stage.eliteDescription
+    ? sanitizeRichText(stage.eliteDescription)
+    : null;
+
+  const resourceLines: string[] = [];
+  if (stage.levelId) {
+    resourceLines.push(`关卡: ${stage.levelId}`);
+  }
+  if (stage.loadingPicId) {
+    resourceLines.push(`读取图: ${stage.loadingPicId}`);
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold leading-tight">{stage.name}</h3>
+          <div className="text-xs text-[hsl(var(--color-muted-foreground))]">
+            ID: {stage.id}
+            {stage.code ? ` · 代号 ${stage.code}` : ""}
+          </div>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          {stage.categoryLabel && <InfoBadge>{stage.categoryLabel}</InfoBadge>}
+          {stage.difficulty && <InfoBadge>难度: {stage.difficulty}</InfoBadge>}
+          {stage.isBoss && <InfoBadge>BOSS</InfoBadge>}
+          {stage.isElite && <InfoBadge>精英敌人</InfoBadge>}
+          {stage.themeKey && <InfoBadge>主题: {stage.themeKey.toUpperCase()}</InfoBadge>}
+        </div>
+      </div>
+
+      {description && <InfoSection title="场景描述" text={description} />}
+      {eliteDescription && <InfoSection title="精英提示" text={eliteDescription} />}
+
+      {resourceLines.length > 0 && (
+        <InfoSection title="资源" text={resourceLines.join("\n")} />
+      )}
+    </div>
   );
 }
 
