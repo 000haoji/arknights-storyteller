@@ -231,7 +231,7 @@ export function Settings() {
         if (response?.needsPermission) {
           await openAndroidInstallPermissionSettings();
           setUpdateStatus("needs-permission");
-          setUpdateMessage("请在系统设置中允许安装未知来源应用，然后返回应用重新点击"立即更新"。\n\n如果无法自动安装，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。");
+          setUpdateMessage(`请在系统设置中允许安装未知来源应用，然后返回应用重新点击"立即更新"。\n\n如果无法自动安装，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。`);
           return;
         }
         setUpdateStatus("installed");
