@@ -935,7 +935,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                       <Collapsible
                         key={`chapter-${index}`}
                         title={chapterName}
-                        defaultOpen={index === 0}
+                        defaultOpen={false}
                         actions={
                           <div className="flex items-center gap-2">
                             <GroupFavoriteButton
@@ -996,7 +996,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         <Collapsible
                           key={`activity-${index}`}
                           title={activityName}
-                          defaultOpen={index === 0}
+                          defaultOpen={false}
                           actions={
                             <div className="flex items-center gap-2">
                               <GroupFavoriteButton
@@ -1051,7 +1051,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         <Collapsible
                           key={`sidestory-${index}`}
                           title={name}
-                          defaultOpen={index === 0}
+                          defaultOpen={false}
                           actions={
                             <div className="flex items-center gap-2">
                               <GroupFavoriteButton
@@ -1101,7 +1101,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         <Collapsible
                           key={`roguelike-${index}`}
                           title={name}
-                          defaultOpen={index === 0}
+                          defaultOpen={false}
                           actions={
                             <div className="flex items-center gap-2">
                               <GroupFavoriteButton
@@ -1168,7 +1168,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         : undefined;
                       const title = themeKey ? `${themeLabel} (${themeKey})` : themeLabel;
                       return (
-                        <Collapsible key={`rogue-stages-${index}`} title={title} defaultOpen={index === 0}>
+                        <Collapsible key={`rogue-stages-${index}`} title={title} defaultOpen={false}>
                           <div className="space-y-2">
                             {stages.map((stage) => (
                               <RoguelikeStageItem key={stage.id} stage={stage} />
@@ -1197,7 +1197,7 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         <Collapsible
                           key={`record-${index}`}
                           title={name}
-                          defaultOpen={index === 0}
+                          defaultOpen={false}
                           actions={
                             <div className="flex items-center gap-2">
                               <GroupFavoriteButton
@@ -1284,11 +1284,11 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                 favoriteCount > 0 ? (
                   favoriteGroupList.length > 0 || individualFavoriteGroups.length > 0 ? (
                     <>
-                      {favoriteGroupList.map(({ groupId, displayName, allStories, visibleStories, type }, index) => (
+                      {favoriteGroupList.map(({ groupId, displayName, allStories, visibleStories, type }) => (
                         <Collapsible
                           key={`favorite-group-${groupId}`}
                           title={displayName}
-                          defaultOpen={index === 0}
+                          defaultOpen={false}
                           actions={
                             <GroupFavoriteButton
                               isFavorite
@@ -1321,11 +1321,11 @@ export function StoryList({ onSelectStory }: StoryListProps) {
                         </Collapsible>
                       ))}
 
-                      {individualFavoriteGroups.map(({ groupKey, displayName, stories }, index) => (
+                      {individualFavoriteGroups.map(({ groupKey, displayName, stories }) => (
                         <Collapsible
                           key={`favorite-individual-${groupKey}`}
                           title={displayName}
-                          defaultOpen={favoriteGroupList.length === 0 && index === 0}
+                          defaultOpen={false}
                           actions={
                             <GroupFavoriteButton
                               isFavorite
