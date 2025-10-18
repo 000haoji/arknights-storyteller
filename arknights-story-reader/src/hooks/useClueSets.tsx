@@ -357,7 +357,7 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
   const importShareCode = useCallback(async (code: string, opts?: { targetSetId?: string; createIfMissing?: boolean; titleIfCreate?: string }): Promise<ImportResult> => {
     const payload = await parseShareCode(code);
     const { stories, items } = payload;
-    const importedItems: Array<Omit<ClueItem, "createdAt"> & { createdAt?: number }> = items
+    const importedItems = items
       .map((ref) => {
         const storyId = normalizeStoryId(stories[ref.storyIndex] ?? "");
         if (!storyId) return null;
@@ -368,7 +368,7 @@ export function ClueSetsProvider({ children }: { children: ReactNode }) {
           preview: undefined,
         };
       })
-      .filter((it): it is Omit<ClueItem, "createdAt"> & { createdAt?: number } => Boolean(it));
+      .filter((it): it is { storyId: string; segmentIndex: number; digestHex: string; preview: undefined } => it !== null) as Array<Omit<ClueItem, "createdAt"> & { createdAt?: number }>;
 
     let setId = opts?.targetSetId;
     let created = false;
