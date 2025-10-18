@@ -326,6 +326,30 @@ export async function openAndroidInstallPermissionSettings(): Promise<void> {
   }
 }
 
+export interface SaveToDownloadsResponse {
+  success: boolean;
+  filePath: string;
+  message: string;
+}
+
+export async function saveApkToDownloads(
+  sourceFilePath: string,
+  fileName: string
+): Promise<SaveToDownloadsResponse> {
+  try {
+    console.info("[AndroidUpdate] Saving APK to downloads folder:", { sourceFilePath, fileName });
+    const response = await invoke<SaveToDownloadsResponse>("android_save_apk_to_downloads", {
+      sourceFilePath,
+      fileName,
+    });
+    console.info("[AndroidUpdate] APK saved successfully:", response);
+    return response;
+  } catch (error) {
+    console.error("[AndroidUpdate] Failed to save APK to downloads:", error);
+    throw error;
+  }
+}
+
 export function useAppUpdater() {
   const startedRef = useRef(false);
 

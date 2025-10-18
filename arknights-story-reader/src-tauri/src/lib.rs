@@ -92,6 +92,7 @@ pub fn run() {
             commands::android_update_method3_frontend_download,
             commands::android_update_method4_install_from_path,
             commands::android_open_install_permission_settings,
+            commands::android_save_apk_to_downloads,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

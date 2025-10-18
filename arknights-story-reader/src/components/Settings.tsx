@@ -15,6 +15,7 @@ import {
   checkAndroidUpdate,
   installAndroidUpdate,
   openAndroidInstallPermissionSettings,
+  saveApkToDownloads,
   type UpdateAvailability,
 } from "@/hooks/useAppUpdater";
 import { UpdateError } from "@/hooks/useAppUpdater";
@@ -66,6 +67,8 @@ export function Settings() {
   >("idle");
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [availableUpdate, setAvailableUpdate] = useState<UpdateAvailability | null>(null);
+  const [downloadedApkPath, setDownloadedApkPath] = useState<string | null>(null);
+  const [downloadedApkFileName, setDownloadedApkFileName] = useState<string | null>(null);
   const runtimePlatform = detectRuntimePlatform();
 
   const {
@@ -217,10 +220,18 @@ export function Settings() {
         setAvailableUpdate(null);
       } else {
         const response = await installAndroidUpdate(availableUpdate);
+        
+        // 提取下载的 APK 文件路径
+        if (response?.status && response.status.startsWith("downloaded:")) {
+          const apkPath = response.status.substring("downloaded:".length);
+          setDownloadedApkPath(apkPath);
+          setDownloadedApkFileName(availableUpdate.manifest.fileName || "update.apk");
+        }
+        
         if (response?.needsPermission) {
           await openAndroidInstallPermissionSettings();
           setUpdateStatus("needs-permission");
-          setUpdateMessage("请在系统设置中允许安装未知来源应用，然后返回应用重新点击“立即更新”。");
+          setUpdateMessage("请在系统设置中允许安装未知来源应用，然后返回应用重新点击"立即更新"。\n\n如果无法自动安装，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。");
           return;
         }
         setUpdateStatus("installed");
@@ -229,9 +240,27 @@ export function Settings() {
       }
     } catch (error) {
       setUpdateStatus("error");
-      setUpdateMessage(error instanceof Error ? error.message : String(error));
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setUpdateMessage(`${errorMessage}\n\n如果安装失败，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。`);
     }
   }, [availableUpdate]);
+
+  const handleSaveApkToDownloads = useCallback(async () => {
+    if (!downloadedApkPath || !downloadedApkFileName) {
+      setUpdateMessage("未找到下载的 APK 文件");
+      return;
+    }
+    
+    try {
+      setUpdateMessage("正在保存 APK 到下载文件夹...");
+      const response = await saveApkToDownloads(downloadedApkPath, downloadedApkFileName);
+      setUpdateMessage(`${response.message}\n\n您可以在文件管理器的下载文件夹中找到安装包进行手动安装。`);
+      setUpdateStatus("idle");
+    } catch (error) {
+      setUpdateMessage(`保存失败: ${error instanceof Error ? error.message : String(error)}`);
+      setUpdateStatus("error");
+    }
+  }, [downloadedApkPath, downloadedApkFileName]);
 
   const isCheckingUpdate = updateStatus === "checking";
   const isInstallingUpdate = updateStatus === "installing";
@@ -570,6 +599,12 @@ export function Settings() {
                         <Download className="mr-2 h-4 w-4" />
                       )}
                       立即更新
+                    </Button>
+                  ) : null}
+                  {downloadedApkPath && runtimePlatform === "android" && (updateStatus === "error" || updateStatus === "needs-permission" || updateStatus === "idle") ? (
+                    <Button type="button" variant="secondary" onClick={handleSaveApkToDownloads}>
+                      <Download className="mr-2 h-4 w-4" />
+                      保存到下载文件夹
                     </Button>
                   ) : null}
                 </div>

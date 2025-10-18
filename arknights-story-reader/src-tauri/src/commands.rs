@@ -596,3 +596,33 @@ pub async fn android_update_method4_install_from_path(
 pub async fn android_open_install_permission_settings(_app: AppHandle) -> Result<(), String> {
     Err("Not Android platform".into())
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SaveToDownloadsResponse {
+    pub success: bool,
+    pub file_path: String,
+    pub message: String,
+}
+
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn android_save_apk_to_downloads(
+    app: AppHandle,
+    source_file_path: String,
+    file_name: String,
+) -> Result<SaveToDownloadsResponse, String> {
+    use tauri::Manager;
+    let updater = app.state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>();
+    updater.save_apk_to_downloads(source_file_path, file_name)
+}
+
+#[cfg(not(target_os = "android"))]
+#[tauri::command]
+pub async fn android_save_apk_to_downloads(
+    _app: AppHandle,
+    _source_file_path: String,
+    _file_name: String,
+) -> Result<SaveToDownloadsResponse, String> {
+    Err("Not Android platform".into())
+}
