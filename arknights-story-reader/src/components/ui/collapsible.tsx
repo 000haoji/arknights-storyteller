@@ -4,12 +4,13 @@ import { cn } from "@/lib/utils"
 
 interface CollapsibleProps {
   title: string
+  subtitle?: string
   defaultOpen?: boolean
   children: React.ReactNode
   actions?: React.ReactNode
 }
 
-export function Collapsible({ title, defaultOpen = false, children, actions }: CollapsibleProps) {
+export function Collapsible({ title, subtitle, defaultOpen = false, children, actions }: CollapsibleProps) {
   const [open, setOpen] = React.useState(defaultOpen)
 
   return (
@@ -18,9 +19,14 @@ export function Collapsible({ title, defaultOpen = false, children, actions }: C
         <button
           type="button"
           onClick={() => setOpen(!open)}
-          className="flex flex-1 items-center justify-between gap-2 bg-transparent p-0 text-left font-semibold text-[hsl(var(--color-foreground))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--color-primary))]"
+          className="flex flex-1 items-center justify-between gap-2 bg-transparent p-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[hsl(var(--color-primary))]"
         >
-          <span>{title}</span>
+          <div className="flex flex-col gap-1">
+            <span className="font-semibold text-[hsl(var(--color-foreground))]">{title}</span>
+            {subtitle && (
+              <span className="text-xs text-[hsl(var(--color-muted-foreground))]">{subtitle}</span>
+            )}
+          </div>
           <ChevronDown
             className={cn(
               "h-5 w-5 flex-shrink-0 transition-transform duration-200",
