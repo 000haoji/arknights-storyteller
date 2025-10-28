@@ -1,9 +1,10 @@
 use crate::data_service::DataService;
 use crate::models::{
     Chapter, CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
-    CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
-    CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, ParsedStoryContent,
-    RoguelikeCharm, RoguelikeStage, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
+    CharacterHandbook, CharacterHandbookByName, CharacterPotentialRanks, CharacterPotentialToken,
+    CharacterSkins, CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice,
+    Furniture, FurnitureSearchResult, FurnitureTheme, ParsedStoryContent, RoguelikeCharm,
+    RoguelikeRelic, RoguelikeStage, SearchDebugResponse, SearchResult, StoryCategory, StoryEntry,
     StoryIndexStatus, SubProfessionInfo, TeamPowerInfo,
 };
 use crate::parser::parse_story_text;
@@ -261,6 +262,16 @@ pub async fn get_roguelike_charms(
     tauri::async_runtime::spawn_blocking(move || service.get_roguelike_charms())
         .await
         .map_err(|err| format!("Failed to join roguelike charms task: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_roguelike_relics(
+    state: State<'_, AppState>,
+) -> Result<Vec<RoguelikeRelic>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_roguelike_relics())
+        .await
+        .map_err(|err| format!("Failed to join roguelike relics task: {}", err))?
 }
 
 #[tauri::command]
@@ -625,4 +636,72 @@ pub async fn android_save_apk_to_downloads(
     _file_name: String,
 ) -> Result<SaveToDownloadsResponse, String> {
     Err("Not Android platform".into())
+}
+
+// ==================== 家具相关命令 ====================
+
+#[tauri::command]
+pub async fn get_all_furnitures(state: State<'_, AppState>) -> Result<Vec<Furniture>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_all_furnitures())
+        .await
+        .map_err(|err| format!("Failed to get furnitures: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_furnitures_by_theme(
+    state: State<'_, AppState>,
+    theme_id: String,
+) -> Result<Vec<Furniture>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_furnitures_by_theme(&theme_id))
+        .await
+        .map_err(|err| format!("Failed to get furnitures by theme: {}", err))?
+}
+
+#[tauri::command]
+pub async fn search_furnitures(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<FurnitureSearchResult>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.search_furnitures(&query))
+        .await
+        .map_err(|err| format!("Failed to search furnitures: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_furniture_themes(
+    state: State<'_, AppState>,
+) -> Result<Vec<FurnitureTheme>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_furniture_themes())
+        .await
+        .map_err(|err| format!("Failed to get furniture themes: {}", err))?
+}
+
+// ==================== 干员密录通过名字查询 ====================
+
+#[tauri::command]
+pub async fn get_character_handbook_by_name(
+    state: State<'_, AppState>,
+    char_name: String,
+) -> Result<CharacterHandbookByName, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || service.get_character_handbook_by_name(&char_name))
+        .await
+        .map_err(|err| format!("Failed to get character handbook by name: {}", err))?
+}
+
+#[tauri::command]
+pub async fn get_character_handbooks_by_names(
+    state: State<'_, AppState>,
+    char_names: Vec<String>,
+) -> Result<Vec<CharacterHandbookByName>, String> {
+    let service = clone_service(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        service.get_character_handbooks_by_names(char_names)
+    })
+    .await
+    .map_err(|err| format!("Failed to get character handbooks by names: {}", err))?
 }

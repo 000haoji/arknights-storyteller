@@ -60,6 +60,7 @@ pub fn run() {
             commands::get_record_stories_grouped,
             commands::get_rune_stories,
             commands::get_roguelike_charms,
+            commands::get_roguelike_relics,
             commands::get_roguelike_stages,
             commands::get_characters_list,
             commands::get_character_handbook,
@@ -93,6 +94,14 @@ pub fn run() {
             commands::android_update_method4_install_from_path,
             commands::android_open_install_permission_settings,
             commands::android_save_apk_to_downloads,
+            // 家具相关命令
+            commands::get_all_furnitures,
+            commands::get_furnitures_by_theme,
+            commands::search_furnitures,
+            commands::get_furniture_themes,
+            // 干员密录通过名字查询
+            commands::get_character_handbook_by_name,
+            commands::get_character_handbooks_by_names,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

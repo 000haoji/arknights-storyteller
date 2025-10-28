@@ -8,9 +8,10 @@ import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 
 interface SearchPanelProps {
   onSelectResult: (story: StoryEntry, focus: { query: string; snippet?: string | null }) => void;
+  onSelectFurniture?: (furnitureId: string) => void;
 }
 
-export function SearchPanel({ onSelectResult }: SearchPanelProps) {
+export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -99,10 +100,20 @@ export function SearchPanel({ onSelectResult }: SearchPanelProps) {
   const openResult = async (result: SearchResult) => {
     try {
       setOpeningStoryId(result.storyId);
-      const story = await api.getStoryEntry(result.storyId);
-      onSelectResult(story, { query, snippet: result.matchedText });
+      
+      // 检查是否是家具结果
+      if (result.category === "家具" && result.storyId.startsWith("furniture_")) {
+        const furnitureId = result.storyId.replace("furniture_", "");
+        if (onSelectFurniture) {
+          onSelectFurniture(furnitureId);
+        }
+      } else {
+        // 普通剧情结果
+        const story = await api.getStoryEntry(result.storyId);
+        onSelectResult(story, { query, snippet: result.matchedText });
+      }
     } catch (err) {
-      console.error("Open story failed:", err);
+      console.error("Open result failed:", err);
     } finally {
       setOpeningStoryId(null);
     }

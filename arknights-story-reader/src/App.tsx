@@ -14,9 +14,10 @@ import { ClueSetsPanel } from "@/components/ClueSetsPanel";
 import { ClueSetReader } from "@/components/ClueSetReader";
 import { KeepAlive } from "@/components/KeepAlive";
 import { CharactersPanel } from "@/components/CharactersPanel";
+import { FurniturePanel } from "@/components/FurniturePanel";
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 
-type Tab = "stories" | "characters" | "search" | "clues" | "settings";
+type Tab = "stories" | "characters" | "search" | "clues" | "settings" | "furniture";
 
 interface ReaderFocus {
   storyId: string;
@@ -126,6 +127,13 @@ function App() {
     []
   );
 
+  const handleSelectFurniture = useCallback((furnitureId: string) => {
+    console.log("[App] 选择家具:", furnitureId);
+    // 切换到家具面板
+    setActiveTab("furniture");
+    // TODO: 可以在这里添加家具详情显示逻辑
+  }, []);
+
   const handleOpenStoryWithCharacter = useCallback(
     (story: StoryEntry, character: string) => {
       console.log("[App] 从人物面板打开剧情:", story.storyName, "角色:", character);
@@ -173,14 +181,15 @@ function App() {
     [handleSelectStory]
   );
   const searchView = useMemo(
-    () => <SearchPanel onSelectResult={handleSearchResult} />,
-    [handleSearchResult]
+    () => <SearchPanel onSelectResult={handleSearchResult} onSelectFurniture={handleSelectFurniture} />,
+    [handleSearchResult, handleSelectFurniture]
   );
   const settingsView = useMemo(() => <Settings />, []);
   const cluesView = useMemo(
     () => <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} onReadSet={handleReadClueSet} />,
     [handleOpenStoryJump, handleReadClueSet]
   );
+  const furnitureView = useMemo(() => <FurniturePanel />, []);
 
   const readerView = readerStory ? (
     <StoryReader
@@ -232,6 +241,9 @@ function App() {
             className="absolute inset-0"
           >
             {cluesView}
+          </KeepAlive>
+          <KeepAlive active={!readerActive && activeTab === "furniture"} className="absolute inset-0">
+            {furnitureView}
           </KeepAlive>
           <KeepAlive active={!readerActive && activeTab === "settings"} className="absolute inset-0">
             {settingsView}

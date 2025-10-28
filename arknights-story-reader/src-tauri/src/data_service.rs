@@ -15,13 +15,14 @@ use zip::ZipArchive;
 use crate::models::{
     Activity, BlackboardValue, BuildingSkillInfo, BuildingSkillUnlockCondition, Chapter,
     CharacterAllData, CharacterBasicInfo, CharacterBuildingSkills, CharacterEquipment,
-    CharacterHandbook, CharacterPotentialRanks, CharacterPotentialToken, CharacterSkins,
-    CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice, EquipmentInfo,
-    HandbookStory, HandbookStorySection, PotentialRank, RoguelikeCharm, RoguelikeStage,
-    SearchDebugResponse, SearchResult, SkinInfo, SkillInfo, SkillLevel, SkillSPData,
-    StoryCategory, StoryEntry, StoryIndexStatus, StorySegment, SubProfessionInfo,
-    TalentCandidate, TalentInfo, TalentUnlockCondition, TeamPowerInfo, TraitCandidate,
-    TraitInfo, TraitUnlockCondition, VoiceLine,
+    CharacterHandbook, CharacterHandbookByName, CharacterPotentialRanks, CharacterPotentialToken,
+    CharacterSkins, CharacterSkills, CharacterTalents, CharacterTrait, CharacterVoice,
+    EquipmentInfo, Furniture, FurnitureSearchResult, FurnitureTheme, HandbookStory,
+    HandbookStorySection, PotentialRank, RoguelikeCharm, RoguelikeRelic, RoguelikeStage, SearchDebugResponse,
+    SearchResult, SkinInfo, SkillInfo, SkillLevel, SkillSPData, StoryCategory, StoryEntry,
+    StoryIndexStatus, StorySegment, SubProfessionInfo, TalentCandidate, TalentInfo,
+    TalentUnlockCondition, TeamPowerInfo, TraitCandidate, TraitInfo, TraitUnlockCondition,
+    VoiceLine,
 };
 use crate::parser::parse_story_text;
 
@@ -1624,6 +1625,37 @@ impl DataService {
             }
         }
 
+        // 搜索家具（如果还没达到限制）
+        if results.len() < SEARCH_RESULT_LIMIT {
+            if let Ok(furnitures) = self.get_all_furnitures() {
+                let query_norm = normalize_nfkc_lower_strip_marks(query);
+                
+                for furniture in furnitures {
+                    if results.len() >= SEARCH_RESULT_LIMIT {
+                        break;
+                    }
+
+                    let name_norm = normalize_nfkc_lower_strip_marks(&furniture.name);
+                    let desc_norm = normalize_nfkc_lower_strip_marks(&furniture.description);
+
+                    if name_norm.contains(&query_norm) || desc_norm.contains(&query_norm) {
+                        let matched_text = if name_norm.contains(&query_norm) {
+                            furniture.name.clone()
+                        } else {
+                            furniture.description.clone()
+                        };
+
+                        results.push(SearchResult {
+                            story_id: format!("furniture_{}", furniture.id),
+                            story_name: furniture.name.clone(),
+                            matched_text,
+                            category: "家具".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+
         Ok(Some(results))
     }
 
@@ -1665,6 +1697,35 @@ impl DataService {
                     });
                     if results.len() >= SEARCH_RESULT_LIMIT {
                         return Ok(results);
+                    }
+                }
+            }
+        }
+
+        // 搜索家具（如果还没达到限制）
+        if results.len() < SEARCH_RESULT_LIMIT {
+            if let Ok(furnitures) = self.get_all_furnitures() {
+                for furniture in furnitures {
+                    if results.len() >= SEARCH_RESULT_LIMIT {
+                        break;
+                    }
+
+                    let name_norm = normalize_nfkc_lower_strip_marks(&furniture.name);
+                    let desc_norm = normalize_nfkc_lower_strip_marks(&furniture.description);
+
+                    if name_norm.contains(&query_norm) || desc_norm.contains(&query_norm) {
+                        let matched_text = if name_norm.contains(&query_norm) {
+                            furniture.name.clone()
+                        } else {
+                            furniture.description.clone()
+                        };
+
+                        results.push(SearchResult {
+                            story_id: format!("furniture_{}", furniture.id),
+                            story_name: furniture.name.clone(),
+                            matched_text,
+                            category: "家具".to_string(),
+                        });
                     }
                 }
             }
@@ -2542,17 +2603,117 @@ impl DataService {
             return Err("NOT_INSTALLED".to_string());
         }
 
-        let story_review_file = self
+        // 从 handbook_info_table.json 读取干员密录数据
+        let handbook_file = self
             .data_dir
-            .join("zh_CN/gamedata/excel/story_review_table.json");
+            .join("zh_CN/gamedata/excel/handbook_info_table.json");
 
-        let content = fs::read_to_string(&story_review_file)
-            .map_err(|e| format!("Failed to read story review file: {}", e))?;
+        let handbook_content = fs::read_to_string(&handbook_file)
+            .map_err(|e| format!("Failed to read handbook file: {}", e))?;
 
-        let data: HashMap<String, Value> = serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse story review data: {}", e))?;
+        let handbook_data: Value = serde_json::from_str(&handbook_content)
+            .map_err(|e| format!("Failed to parse handbook data: {}", e))?;
 
-        let stories = self.parse_stories_by_entry_type(&data, "NONE")?;
+        // 同时读取 character_table.json 获取干员名字
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+
+        let character_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character file: {}", e))?;
+
+        let character_data: Value = serde_json::from_str(&character_content)
+            .map_err(|e| format!("Failed to parse character data: {}", e))?;
+
+        let mut stories = Vec::new();
+
+        // 遍历所有干员的 handbookAvgList
+        if let Some(handbook_dict) = handbook_data.get("handbookDict").and_then(|v| v.as_object()) {
+            for (char_id, handbook_value) in handbook_dict.iter() {
+                if let Some(avg_list) = handbook_value
+                    .get("handbookAvgList")
+                    .and_then(|v| v.as_array())
+                {
+                    // 获取干员名字
+                    let char_name = character_data
+                        .get(char_id)
+                        .and_then(|v| v.get("name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("未知干员");
+
+                    // 处理每个密录集合
+                    for story_set in avg_list {
+                        let story_set_name = story_set
+                            .get("storySetName")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+
+                        if let Some(avg_stories) = story_set.get("avgList").and_then(|v| v.as_array()) {
+                            for (idx, avg_story) in avg_stories.iter().enumerate() {
+                                // 构建 StoryEntry
+                                let story_id = avg_story
+                                    .get("storyId")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+
+                                let story_intro = avg_story
+                                    .get("storyIntro")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("");
+
+                                let story_txt = avg_story
+                                    .get("storyTxt")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+
+                                let story_info = avg_story
+                                    .get("storyInfo")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.to_string());
+
+                                // 构建显示名称：干员名 - 密录名（不包含简介）
+                                let display_name = format!("{} - {}", char_name, story_set_name);
+                                
+                                // 将简介放到avgTag字段显示为小字
+                                let avg_tag_text = if !story_intro.is_empty() {
+                                    story_intro.to_string()
+                                } else {
+                                    "干员密录".to_string()
+                                };
+
+                                let story = StoryEntry {
+                                    story_review_type: "MEMORY".to_string(),
+                                    story_id,
+                                    story_group: char_name.to_string(), // 使用干员名作为分组
+                                    story_sort: idx as i32,
+                                    story_dependence: None,
+                                    story_can_show: Some(1),
+                                    story_code: None, // 不显示 charId
+                                    story_name: display_name,
+                                    story_info,
+                                    story_can_enter: Some(1),
+                                    story_txt: story_txt.unwrap_or_default(),
+                                    avg_tag: Some(avg_tag_text), // 使用简介作为标签
+                                    unlock_type: "NONE".to_string(),
+                                    cost_item_type: Some("NONE".to_string()),
+                                    cost_item_id: None,
+                                    cost_item_count: Some(0),
+                                    stage_count: Some(0),
+                                    required_stages: None,
+                                };
+
+                                stories.push(story);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 按干员名字排序
+        stories.sort_by(|a, b| a.story_group.cmp(&b.story_group));
+
         Ok(stories)
     }
 
@@ -3092,6 +3253,119 @@ impl DataService {
         });
 
         Ok(stages)
+    }
+
+    /// 获取肉鸽符文/藏品（集成战略）
+    pub fn get_roguelike_relics(&self) -> Result<Vec<RoguelikeRelic>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let topic_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/roguelike_topic_table.json");
+        
+        let content = fs::read_to_string(&topic_file)
+            .map_err(|e| format!("Failed to read roguelike topic table: {}", e))?;
+        
+        let root: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse roguelike topic table: {}", e))?;
+
+        let Some(details) = root.get("details").and_then(|v| v.as_object()) else {
+            return Ok(Vec::new());
+        };
+
+        let topics = root.get("topics").and_then(|v| v.as_object());
+
+        let mut relics = Vec::new();
+
+        // 遍历每个肉鸽主题
+        for (topic_id, topic_detail) in details {
+            // 获取主题名称
+            let topic_name = topics
+                .and_then(|t| t.get(topic_id))
+                .and_then(|v| v.get("name"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(topic_id)
+                .to_string();
+
+            // 获取藏品列表（items字段）
+            if let Some(items_obj) = topic_detail.get("items").and_then(|v| v.as_object()) {
+                for (item_id, item_data) in items_obj {
+                    let name = item_data
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(item_id)
+                        .to_string();
+
+                    let description = item_data
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    let usage = item_data
+                        .get("usage")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    let obtain_approach = item_data
+                        .get("obtainApproach")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    // rarity 是字符串类型
+                    let rarity = item_data
+                        .get("rarity")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("NORMAL")
+                        .to_string();
+
+                    let sort_id = item_data
+                        .get("sortId")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(999) as i32;
+
+                    let relic_type = item_data
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    let sub_type = item_data
+                        .get("subType")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    let icon_id = item_data
+                        .get("iconId")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+
+                    relics.push(RoguelikeRelic {
+                        id: item_id.clone(),
+                        name,
+                        description,
+                        usage,
+                        obtain_approach,
+                        rarity,
+                        sort_id,
+                        category: topic_name.clone(),
+                        relic_type,
+                        sub_type,
+                        icon_id,
+                        value: None,
+                    });
+                }
+            }
+        }
+
+        // 按类别和名称排序
+        relics.sort_by(|a, b| {
+            a.category
+                .cmp(&b.category)
+                .then_with(|| a.name.cmp(&b.name))
+        });
+
+        Ok(relics)
     }
 
     /// 获取所有干员基础信息
@@ -4600,6 +4874,300 @@ impl DataService {
             char_name,
             building_skills,
         })
+    }
+
+    // ==================== 家具相关方法 ====================
+
+    /// 获取所有家具列表
+    pub fn get_all_furnitures(&self) -> Result<Vec<Furniture>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let building_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/building_data.json");
+        let content = fs::read_to_string(&building_file)
+            .map_err(|e| format!("Failed to read building_data.json: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse building_data.json: {}", e))?;
+
+        let furnitures_obj = data
+            .get("customData")
+            .and_then(|v| v.get("furnitures"))
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "furnitures field not found in customData".to_string())?;
+
+        let mut furnitures = Vec::new();
+        for (id, furniture_data) in furnitures_obj {
+            if let Ok(furniture) = self.parse_furniture(id, furniture_data) {
+                furnitures.push(furniture);
+            }
+        }
+
+        // 按 sortId 排序
+        furnitures.sort_by_key(|f| f.sort_id);
+
+        Ok(furnitures)
+    }
+
+    /// 按主题ID获取家具
+    pub fn get_furnitures_by_theme(&self, theme_id: &str) -> Result<Vec<Furniture>, String> {
+        let all_furnitures = self.get_all_furnitures()?;
+        let filtered: Vec<Furniture> = all_furnitures
+            .into_iter()
+            .filter(|f| f.theme_id == theme_id)
+            .collect();
+        Ok(filtered)
+    }
+
+    /// 搜索家具（按名称或描述）
+    pub fn search_furnitures(&self, query: &str) -> Result<Vec<FurnitureSearchResult>, String> {
+        let all_furnitures = self.get_all_furnitures()?;
+        let themes = self.get_furniture_themes()?;
+        
+        let theme_map: HashMap<String, String> = themes
+            .into_iter()
+            .map(|t| (t.theme_id.clone(), t.theme_name.clone()))
+            .collect();
+
+        let query_lower = query.to_lowercase();
+        let results: Vec<FurnitureSearchResult> = all_furnitures
+            .into_iter()
+            .filter(|f| {
+                f.name.to_lowercase().contains(&query_lower)
+                    || f.description.to_lowercase().contains(&query_lower)
+                    || f.usage.to_lowercase().contains(&query_lower)
+            })
+            .map(|furniture| {
+                let theme_name = theme_map.get(&furniture.theme_id).cloned();
+                FurnitureSearchResult {
+                    furniture,
+                    theme_name,
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    /// 获取所有家具主题
+    pub fn get_furniture_themes(&self) -> Result<Vec<FurnitureTheme>, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        let building_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/building_data.json");
+        let content = fs::read_to_string(&building_file)
+            .map_err(|e| format!("Failed to read building_data.json: {}", e))?;
+        let data: Value = serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse building_data.json: {}", e))?;
+
+        let themes_obj = data
+            .get("customData")
+            .and_then(|v| v.get("themes"))
+            .and_then(|v| v.as_object());
+
+        let mut themes = Vec::new();
+
+        if let Some(themes_obj) = themes_obj {
+            for (theme_id, theme_data) in themes_obj {
+                let theme = FurnitureTheme {
+                    theme_id: theme_id.to_string(),
+                    theme_name: theme_data
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(theme_id)
+                        .to_string(),
+                    theme_type: theme_data
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    sort_id: theme_data
+                        .get("sortId")
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0) as i32,
+                };
+                themes.push(theme);
+            }
+        }
+
+        themes.sort_by_key(|t| t.sort_id);
+        Ok(themes)
+    }
+
+    /// 解析单个家具数据
+    fn parse_furniture(&self, id: &str, data: &Value) -> Result<Furniture, String> {
+        Ok(Furniture {
+            id: id.to_string(),
+            sort_id: data
+                .get("sortId")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+            name: data
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            icon_id: data
+                .get("iconId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            interact_type: data
+                .get("interactType")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            music_id: data
+                .get("musicId")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string()),
+            furniture_type: data
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            sub_type: data
+                .get("subType")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            location: data
+                .get("location")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            category: data
+                .get("category")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            valid_on_rotate: data
+                .get("validOnRotate")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            enable_rotate: data
+                .get("enableRotate")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+            rarity: data
+                .get("rarity")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32,
+            theme_id: data
+                .get("themeId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            group_id: data
+                .get("groupId")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            width: data
+                .get("width")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+            depth: data
+                .get("depth")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+            height: data
+                .get("height")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+            comfort: data
+                .get("comfort")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0) as i32,
+            usage: data
+                .get("usage")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            description: data
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            obtain_approach: data
+                .get("obtainApproach")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            can_be_destroy: data
+                .get("canBeDestroy")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true),
+            quantity: data
+                .get("quantity")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(1) as i32,
+        })
+    }
+
+    // ==================== 干员密录通过名字查询 ====================
+
+    /// 通过干员名字获取干员密录
+    pub fn get_character_handbook_by_name(
+        &self,
+        char_name: &str,
+    ) -> Result<CharacterHandbookByName, String> {
+        if !self.is_installed() {
+            return Err("NOT_INSTALLED".to_string());
+        }
+
+        // 读取 character_table.json 查找对应的 char_id
+        let character_file = self
+            .data_dir
+            .join("zh_CN/gamedata/excel/character_table.json");
+        let char_content = fs::read_to_string(&character_file)
+            .map_err(|e| format!("Failed to read character_table.json: {}", e))?;
+        let char_table: Value = serde_json::from_str(&char_content)
+            .map_err(|e| format!("Failed to parse character_table.json: {}", e))?;
+
+        // 查找匹配的干员
+        let mut found_char_id: Option<String> = None;
+        if let Some(chars_obj) = char_table.as_object() {
+            for (char_id, char_data) in chars_obj {
+                if let Some(name) = char_data.get("name").and_then(|v| v.as_str()) {
+                    if name == char_name {
+                        found_char_id = Some(char_id.clone());
+                        break;
+                    }
+                }
+            }
+        }
+
+        let char_id = found_char_id
+            .ok_or_else(|| format!("Character with name '{}' not found", char_name))?;
+
+        // 使用现有的 get_character_handbook 方法获取密录
+        let handbook = self.get_character_handbook(&char_id)?;
+
+        Ok(CharacterHandbookByName {
+            char_id,
+            char_name: char_name.to_string(),
+            handbook,
+        })
+    }
+
+    /// 批量通过干员名字获取密录
+    pub fn get_character_handbooks_by_names(
+        &self,
+        char_names: Vec<String>,
+    ) -> Result<Vec<CharacterHandbookByName>, String> {
+        let mut results = Vec::new();
+        for name in char_names {
+            if let Ok(handbook) = self.get_character_handbook_by_name(&name) {
+                results.push(handbook);
+            }
+        }
+        Ok(results)
     }
 }
 

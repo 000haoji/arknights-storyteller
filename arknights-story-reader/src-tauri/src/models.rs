@@ -187,6 +187,25 @@ pub struct RoguelikeCharm {
     pub drop_stage_ids: Vec<String>,
 }
 
+// 肉鸽符文/藏品（集成战略）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoguelikeRelic {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub usage: Option<String>,
+    pub obtain_approach: Option<String>,
+    pub rarity: String,
+    pub sort_id: i32,
+    pub category: String, // 肉鸽主题名称
+    #[serde(rename = "type")]
+    pub relic_type: Option<String>,
+    pub sub_type: Option<String>,
+    pub icon_id: Option<String>,
+    pub value: Option<i32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RoguelikeStage {
@@ -633,4 +652,62 @@ pub struct CharacterAllData {
     pub skins: Option<CharacterSkins>,
     #[serde(rename = "buildingSkills")]
     pub building_skills: Option<CharacterBuildingSkills>,
+}
+
+// ==================== 新增：家具相关数据结构 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Furniture {
+    pub id: String,
+    pub sort_id: i32,
+    pub name: String,
+    pub icon_id: String,
+    pub interact_type: String,
+    pub music_id: Option<String>,
+    #[serde(rename = "type")]
+    pub furniture_type: String,
+    pub sub_type: String,
+    pub location: String,
+    pub category: String,
+    pub valid_on_rotate: bool,
+    pub enable_rotate: bool,
+    pub rarity: i32,
+    pub theme_id: String,
+    pub group_id: String,
+    pub width: i32,
+    pub depth: i32,
+    pub height: i32,
+    pub comfort: i32,
+    pub usage: String,
+    pub description: String,
+    pub obtain_approach: String,
+    pub can_be_destroy: bool,
+    pub quantity: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FurnitureTheme {
+    pub theme_id: String,
+    pub theme_name: String,
+    pub theme_type: Option<String>,
+    pub sort_id: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FurnitureSearchResult {
+    pub furniture: Furniture,
+    pub theme_name: Option<String>,
+}
+
+// ==================== 新增：通过干员名字查询密录 ====================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CharacterHandbookByName {
+    pub char_id: String,
+    pub char_name: String,
+    pub handbook: CharacterHandbook,
 }

@@ -10,7 +10,7 @@ configs:
 settingGroups:
   app:
     base:
-      PRODUCT_NAME: 明日方舟剧情阅读器
+      PRODUCT_NAME: story-teller
       PRODUCT_BUNDLE_IDENTIFIER: com.arknights.storyreader
 targetTemplates:
   app:

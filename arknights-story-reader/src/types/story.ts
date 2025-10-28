@@ -134,6 +134,21 @@ export interface RoguelikeCharm {
   dropStageIds: string[];
 }
 
+export interface RoguelikeRelic {
+  id: string;
+  name: string;
+  description?: string;
+  usage?: string;
+  obtainApproach?: string;
+  rarity: string;
+  sortId: number;
+  category: string;
+  type?: string;
+  subType?: string;
+  iconId?: string;
+  value?: number;
+}
+
 export interface RoguelikeStage {
   id: string;
   name: string;
@@ -425,4 +440,53 @@ export interface StoryIndexStatus {
   ready: boolean;
   total: number;
   lastBuiltAt?: number | null;
+}
+
+// ==================== 家具相关类型 ====================
+
+export interface Furniture {
+  id: string;
+  sortId: number;
+  name: string;
+  iconId: string;
+  interactType: string;
+  musicId?: string;
+  type: string;
+  subType: string;
+  location: string;
+  category: string;
+  validOnRotate: boolean;
+  enableRotate: boolean;
+  rarity: number;
+  themeId: string;
+  groupId: string;
+  width: number;
+  depth: number;
+  height: number;
+  comfort: number;
+  usage: string;
+  description: string;
+  obtainApproach: string;
+  canBeDestroy: boolean;
+  quantity: number;
+}
+
+export interface FurnitureTheme {
+  themeId: string;
+  themeName: string;
+  themeType?: string;
+  sortId: number;
+}
+
+export interface FurnitureSearchResult {
+  furniture: Furniture;
+  themeName?: string;
+}
+
+// ==================== 通过干员名字查询密录 ====================
+
+export interface CharacterHandbookByName {
+  charId: string;
+  charName: string;
+  handbook: CharacterHandbook;
 }

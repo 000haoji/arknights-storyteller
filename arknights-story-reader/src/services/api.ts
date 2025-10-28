@@ -9,6 +9,7 @@ import type {
   StoryIndexStatus,
   SearchDebugResponse,
   RoguelikeCharm,
+  RoguelikeRelic,
   RoguelikeStage,
   CharacterBasicInfo,
   CharacterHandbook,
@@ -24,6 +25,10 @@ import type {
   TeamPowerInfo,
   CharacterBuildingSkills,
   CharacterAllData,
+  Furniture,
+  FurnitureTheme,
+  FurnitureSearchResult,
+  CharacterHandbookByName,
 } from "@/types/story";
 
 export interface SyncProgress {
@@ -218,6 +223,11 @@ export const api = {
     return invoke("get_roguelike_charms");
   },
 
+  getRoguelikeRelics: async (): Promise<RoguelikeRelic[]> => {
+    console.log("[API] 调用 get_roguelike_relics");
+    return invoke("get_roguelike_relics");
+  },
+
   // 获取肉鸽场景
   getRoguelikeStages: async (): Promise<RoguelikeStage[]> => {
     console.log("[API] 调用 get_roguelike_stages");
@@ -306,5 +316,52 @@ export const api = {
   getCharacterAllData: async (charId: string): Promise<CharacterAllData> => {
     console.log("[API] 调用 get_character_all_data (优化版), charId:", charId);
     return invoke("get_character_all_data", { charId });
+  },
+
+  // ==================== 家具相关 API ====================
+
+  // 获取所有家具列表
+  getAllFurnitures: async (): Promise<Furniture[]> => {
+    console.log("[API] 调用 get_all_furnitures");
+    return invoke("get_all_furnitures");
+  },
+
+  // 按主题ID获取家具
+  getFurnituresByTheme: async (themeId: string): Promise<Furniture[]> => {
+    console.log("[API] 调用 get_furnitures_by_theme, themeId:", themeId);
+    return invoke("get_furnitures_by_theme", { themeId });
+  },
+
+  // 搜索家具（按名称或描述）
+  searchFurnitures: async (query: string): Promise<FurnitureSearchResult[]> => {
+    console.log("[API] 调用 search_furnitures, query:", query);
+    return invoke("search_furnitures", { query });
+  },
+
+  // 获取所有家具主题
+  getFurnitureThemes: async (): Promise<FurnitureTheme[]> => {
+    console.log("[API] 调用 get_furniture_themes");
+    return invoke("get_furniture_themes");
+  },
+
+  // ==================== 干员密录通过名字查询 ====================
+
+  // 通过干员名字获取干员密录
+  getCharacterHandbookByName: async (
+    charName: string
+  ): Promise<CharacterHandbookByName> => {
+    console.log("[API] 调用 get_character_handbook_by_name, charName:", charName);
+    return invoke("get_character_handbook_by_name", { charName });
+  },
+
+  // 批量通过干员名字获取密录
+  getCharacterHandbooksByNames: async (
+    charNames: string[]
+  ): Promise<CharacterHandbookByName[]> => {
+    console.log(
+      "[API] 调用 get_character_handbooks_by_names, charNames:",
+      charNames
+    );
+    return invoke("get_character_handbooks_by_names", { charNames });
   },
 };
