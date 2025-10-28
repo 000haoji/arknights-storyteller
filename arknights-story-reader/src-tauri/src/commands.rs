@@ -465,7 +465,6 @@ pub async fn android_update_method2_http_download(
 ) -> Result<AndroidInstallResponse, String> {
     use std::fs::File;
     use std::io::Write;
-    use std::path::PathBuf;
     use tauri::Manager;
 
     let client = reqwest::blocking::Client::builder()
@@ -608,21 +607,13 @@ pub async fn android_open_install_permission_settings(_app: AppHandle) -> Result
     Err("Not Android platform".into())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SaveToDownloadsResponse {
-    pub success: bool,
-    pub file_path: String,
-    pub message: String,
-}
-
 #[cfg(target_os = "android")]
 #[tauri::command]
 pub async fn android_save_apk_to_downloads(
     app: AppHandle,
     source_file_path: String,
     file_name: String,
-) -> Result<SaveToDownloadsResponse, String> {
+) -> Result<crate::apk_updater::SaveToDownloadsResponse, String> {
     use tauri::Manager;
     let updater = app.state::<crate::apk_updater::AndroidUpdater<tauri::Wry>>();
     updater.save_apk_to_downloads(source_file_path, file_name)
@@ -634,7 +625,7 @@ pub async fn android_save_apk_to_downloads(
     _app: AppHandle,
     _source_file_path: String,
     _file_name: String,
-) -> Result<SaveToDownloadsResponse, String> {
+) -> Result<crate::apk_updater::SaveToDownloadsResponse, String> {
     Err("Not Android platform".into())
 }
 
