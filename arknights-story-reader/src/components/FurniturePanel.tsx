@@ -6,7 +6,6 @@ import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Input } from "@/components/ui/input";
 import { Collapsible } from "@/components/ui/collapsible";
 import { Search, Loader2, Package, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type TabType = "furniture" | "rogueCharm" | "rogueRelic" | "rogueStage";
 
