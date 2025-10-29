@@ -125,8 +125,34 @@ aapt dump badging src-tauri/gen/android/app/build/outputs/apk/universal/release/
 ✨ 完成! 已更新 3 个文件
 ```
 
+## 📱 Android 更新说明
+
+### 自动更新增强功能
+
+为了解决某些设备上自动安装失败的问题，Android 版本现在提供两种更新方式：
+
+#### 方式一：自动更新
+1. 应用内检测到新版本
+2. 点击"立即更新"按钮
+3. 自动下载并安装
+
+#### 方式二：手动下载（推荐备选）
+1. 应用内检测到新版本
+2. 点击"手动下载"按钮
+3. 自动打开 GitHub Release 页面
+4. 下载 APK 并手动安装
+
+**适用场景：**
+- 网络环境不稳定
+- 自动安装权限受限
+- 希望查看完整的更新说明
+- 更倾向于手动控制更新流程
+
+详细说明请查看：[ANDROID_UPDATE_ENHANCEMENT.md](./ANDROID_UPDATE_ENHANCEMENT.md)
+
 ## 📚 相关文档
 
 - [ANDROID_VERSION_FIX.md](../ANDROID_VERSION_FIX.md) - Android 版本号问题的详细说明
+- [ANDROID_UPDATE_ENHANCEMENT.md](./ANDROID_UPDATE_ENHANCEMENT.md) - Android 更新功能增强说明
 - [package.json](./package.json) - 项目配置和脚本定义
 

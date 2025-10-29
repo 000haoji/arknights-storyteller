@@ -24,6 +24,7 @@ export type AndroidUpdateManifest = {
   url: string;
   fileName?: string | null;
   notes?: string | null;
+  githubReleaseUrl?: string | null;
 };
 
 export interface DesktopUpdateAvailable {
@@ -103,6 +104,7 @@ function toManifestFromGithubLatestRelease(json: any): AndroidUpdateManifest | n
   if (!json || typeof json !== "object") return null;
   const tag: string | undefined = json.tag_name;
   const assets: Array<any> | undefined = json.assets;
+  const htmlUrl: string | undefined = json.html_url;
   if (!tag || !Array.isArray(assets)) return null;
 
   // Derive version from tag, e.g. "app-v1.10.5" -> "1.10.5"
@@ -120,6 +122,7 @@ function toManifestFromGithubLatestRelease(json: any): AndroidUpdateManifest | n
     url: String(apkAsset.browser_download_url),
     fileName: String(apkAsset.name ?? "") || null,
     notes: (json?.body as string | undefined) ?? null,
+    githubReleaseUrl: htmlUrl || null,
   };
 }
 
@@ -347,6 +350,16 @@ export async function saveApkToDownloads(
   } catch (error) {
     console.error("[AndroidUpdate] Failed to save APK to downloads:", error);
     throw error;
+  }
+}
+
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const opener = await import("@tauri-apps/plugin-opener");
+    await opener.open(url);
+  } catch (error) {
+    console.error("[Updater] Failed to open URL via plugin, falling back to window.open", error);
+    window.open(url, "_blank");
   }
 }
 

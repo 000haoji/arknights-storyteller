@@ -16,6 +16,7 @@ import {
   installAndroidUpdate,
   openAndroidInstallPermissionSettings,
   saveApkToDownloads,
+  openExternalUrl,
   type UpdateAvailability,
 } from "@/hooks/useAppUpdater";
 import { UpdateError } from "@/hooks/useAppUpdater";
@@ -231,7 +232,7 @@ export function Settings() {
         if (response?.needsPermission) {
           await openAndroidInstallPermissionSettings();
           setUpdateStatus("needs-permission");
-          setUpdateMessage(`请在系统设置中允许安装未知来源应用，然后返回应用重新点击"立即更新"。\n\n如果无法自动安装，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。`);
+          setUpdateMessage(`请在系统设置中允许安装未知来源应用，然后返回应用重新点击"立即更新"。\n\n如果无法自动安装，您也可以：\n1. 点击"手动下载"按钮前往 GitHub 下载最新版本\n2. 点击"保存到下载文件夹"按钮将安装包保存到下载文件夹后手动安装`);
           return;
         }
         setUpdateStatus("installed");
@@ -241,7 +242,7 @@ export function Settings() {
     } catch (error) {
       setUpdateStatus("error");
       const errorMessage = error instanceof Error ? error.message : String(error);
-      setUpdateMessage(`${errorMessage}\n\n如果安装失败，您可以点击"保存到下载文件夹"按钮，将安装包保存到下载文件夹后手动安装。`);
+      setUpdateMessage(`${errorMessage}\n\n如果自动安装失败，您可以：\n1. 点击"手动下载"按钮前往 GitHub 下载最新版本\n2. 点击"保存到下载文件夹"按钮将安装包保存到下载文件夹后手动安装`);
     }
   }, [availableUpdate]);
 
@@ -261,6 +262,20 @@ export function Settings() {
       setUpdateStatus("error");
     }
   }, [downloadedApkPath, downloadedApkFileName]);
+
+  const handleOpenGithubRelease = useCallback(async () => {
+    if (!availableUpdate || availableUpdate.platform !== "android") return;
+    
+    const releaseUrl = availableUpdate.manifest.githubReleaseUrl;
+    if (!releaseUrl) {
+      // Fallback to default GitHub releases page
+      const fallbackUrl = "https://github.com/000haoji/arknights-storyteller/releases/latest";
+      await openExternalUrl(fallbackUrl);
+      return;
+    }
+    
+    await openExternalUrl(releaseUrl);
+  }, [availableUpdate]);
 
   const isCheckingUpdate = updateStatus === "checking";
   const isInstallingUpdate = updateStatus === "installing";
@@ -592,14 +607,22 @@ export function Settings() {
                     检查更新
                   </Button>
                   {availableUpdate ? (
-                    <Button type="button" onClick={handleInstallAppUpdate} disabled={isInstallingUpdate}>
-                      {isInstallingUpdate ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
+                    <>
+                      <Button type="button" onClick={handleInstallAppUpdate} disabled={isInstallingUpdate}>
+                        {isInstallingUpdate ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="mr-2 h-4 w-4" />
+                        )}
+                        立即更新
+                      </Button>
+                      {availableUpdate.platform === "android" && (
+                        <Button type="button" variant="outline" onClick={handleOpenGithubRelease}>
+                          <Download className="mr-2 h-4 w-4" />
+                          手动下载
+                        </Button>
                       )}
-                      立即更新
-                    </Button>
+                    </>
                   ) : null}
                   {downloadedApkPath && runtimePlatform === "android" && (updateStatus === "error" || updateStatus === "needs-permission" || updateStatus === "idle") ? (
                     <Button type="button" variant="secondary" onClick={handleSaveApkToDownloads}>
