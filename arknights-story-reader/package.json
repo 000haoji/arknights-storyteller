@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "dev:tauri": "bash scripts/dev-tauri.sh"
+    "dev:tauri": "bash scripts/dev-tauri.sh",
+    "sync-version": "node scripts/sync-version.js",
+    "version": "npm run sync-version && git add -A"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
