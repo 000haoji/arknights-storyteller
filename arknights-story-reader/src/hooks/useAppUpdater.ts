@@ -355,8 +355,8 @@ export async function saveApkToDownloads(
 
 export async function openExternalUrl(url: string): Promise<void> {
   try {
-    const { open } = await import("@tauri-apps/plugin-opener");
-    await open(url);
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
   } catch (error) {
     console.error("[Updater] Failed to open URL via plugin, falling back to window.open", error);
     window.open(url, "_blank");
