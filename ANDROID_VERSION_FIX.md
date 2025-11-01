@@ -27,28 +27,29 @@ tauri.android.versionName=0.1.0    ❌ 应该是 1.10.42
 tauri.android.versionCode=1000     ❌ 应该是 11042
 ```
 
-## ✅ 解决方案
+## ✅ 解决方案（当前版本：1.11.1）
 
-### 1. 更新了 `tauri.properties` 文件
-```properties
-tauri.android.versionName=1.10.42  ✅
-tauri.android.versionCode=11042    ✅
-```
+### 1. 以 `package.json` 为唯一数据源
+- 一切版本号都以 `package.json` 的 `version` 字段为准（当前为 **1.11.1**）
+- Android `versionCode` 通过脚本按公式 `major * 10000 + minor * 100 + patch` 自动计算（当前为 **11101**）
 
-### 2. 在 `tauri.conf.json` 中添加了明确的 versionCode
-```json
-"android": {
-  "minSdkVersion": 24,
-  "versionCode": 11042  // 新增配置
-}
-```
+### 2. 使用同步脚本更新所有配置
+运行 `npm run sync-version`（或执行 `npm version patch|minor|major`，它会自动调用同步脚本）即可自动更新：
+- `src-tauri/tauri.conf.json` → `version` 与 `bundle.android.versionCode`
+- `src-tauri/gen/android/app/tauri.properties` → `versionName` 与 `versionCode`
+- `src-tauri/Cargo.toml` → `version`
 
-### 3. 强制将 `tauri.properties` 加入版本控制
+> `tauri.properties` 仍会被脚本生成；可以将其提交到仓库，但请勿手动编辑。
+
+### 3. 构建前务必执行同步
+本地或 CI/CD 在构建前建议遵循：
 ```bash
-git add -f src-tauri/gen/android/app/tauri.properties
+npm install
+npm run sync-version   # 或执行 npm version ...
+npm run tauri android build
 ```
 
-虽然这个文件通常不应提交，但为了确保 CI/CD 构建使用正确的版本号，我们需要将其纳入版本控制。
+如在 CI 流水线，请在 Tauri 构建步骤前新增 `npm run sync-version`，避免版本号回退。
 
 ## 📊 版本号对应关系
 
@@ -57,6 +58,7 @@ git add -f src-tauri/gen/android/app/tauri.properties
 | 1.0.0  | 1.0.0       | 10000       | 1×10000 + 0×100 + 0 |
 | 1.10.36| 1.10.36     | 11036       | 1×10000 + 10×100 + 36 |
 | 1.10.42| 1.10.42     | 11042       | 1×10000 + 10×100 + 42 |
+| 1.11.1 | 1.11.1      | 11101       | 1×10000 + 11×100 + 1 |
 | 1.2.0  | 1.2.0       | 10200       | 1×10000 + 2×100 + 0 |
 
 ### versionCode 规则
@@ -80,7 +82,7 @@ aapt dump badging app-universal-release.apk | grep version
 ### 安装后验证
 ```bash
 # 在设置 -> 应用中查看
-# 应该显示：story-teller 1.10.42
+# 应该显示：story-teller 1.11.1
 ```
 
 ## 📝 今后版本更新流程
@@ -92,12 +94,12 @@ aapt dump badging app-universal-release.apk | grep version
 #### 方法一：使用 npm version 命令（推荐）
 ```bash
 # 自动升级版本号并同步所有配置
-npm version patch   # 1.10.45 -> 1.10.46
-npm version minor   # 1.10.45 -> 1.11.0
-npm version major   # 1.10.45 -> 2.0.0
+npm version patch   # 1.11.1 -> 1.11.2
+npm version minor   # 1.11.1 -> 1.12.0
+npm version major   # 1.11.1 -> 2.0.0
 
 # 或者手动指定版本号
-npm version 1.11.0
+npm version 1.11.5
 ```
 **优点**：
 - ✅ 自动更新 `package.json` 版本号
@@ -142,26 +144,26 @@ npm run sync-version
 
 1. **`package.json`**
    ```json
-   "version": "1.10.43"
+   "version": "x.y.z"
    ```
 
 2. **`src-tauri/Cargo.toml`**
    ```toml
-   version = "1.10.43"
+   version = "x.y.z"
    ```
 
 3. **`src-tauri/tauri.conf.json`**
    ```json
-   "version": "1.10.43",
+   "version": "x.y.z",
    "android": {
-     "versionCode": 11043
+     "versionCode": <按公式计算的整数>
    }
    ```
 
 4. **`src-tauri/gen/android/app/tauri.properties`**
    ```properties
-   tauri.android.versionName=1.10.43
-   tauri.android.versionCode=11043
+   tauri.android.versionName=x.y.z
+   tauri.android.versionCode=<按公式计算的整数>
    ```
 
 </details>
@@ -169,8 +171,8 @@ npm run sync-version
 ## ⚠️ 重要提醒
 
 ### versionCode 必须递增
-- ✅ 1.10.42 (versionCode 11042) → 1.10.43 (versionCode 11043)
-- ❌ 1.10.42 (versionCode 11042) → 1.2.0 (versionCode 10200)  **降级！会导致无法安装**
+- ✅ 1.11.1 (versionCode 11101) → 1.11.2 (versionCode 11102)
+- ❌ 1.11.1 (versionCode 11101) → 1.2.0 (versionCode 10200)  **降级！会导致无法安装**
 
 ### 如果要发布 1.2.0 版本
 需要确保 versionCode 大于当前的 11042，例如：
@@ -183,41 +185,14 @@ npm run sync-version
 
 ## 🚀 修复后的效果
 
-- ✅ APK 文件名显示正确版本
-- ✅ 安装后应用信息显示 1.10.42
+- ✅ APK 文件名显示正确版本（例如：1.11.1）
+- ✅ 安装后应用信息显示 1.11.1
 - ✅ 可以正常覆盖安装旧版本
 - ✅ Android 系统正确识别为更新版本
 
 ## 🔧 已修复的文件
 
 ### 版本同步修复
-1. ✅ `src-tauri/tauri.conf.json` - 更新 versionCode 到 11045
-2. ✅ `src-tauri/gen/android/app/tauri.properties` - 更新到 1.10.45
-3. ✅ 所有配置文件版本号已同步到 1.10.45
-
-### 自动化工具
-4. ✅ `scripts/sync-version.js` - 新增版本同步脚本
-5. ✅ `package.json` - 添加 `sync-version` 和 `version` 脚本
-
-### 效果
-- ✅ 版本号自动同步，避免手动维护出错
-- ✅ 使用 `npm version` 即可一键更新所有版本配置
-- ✅ 下一次 CI/CD 构建的 APK 将显示正确的版本号！
-
----
-
-## 📖 快速参考
-
-详细的版本更新指南请查看：[VERSION_UPDATE_GUIDE.md](arknights-story-reader/VERSION_UPDATE_GUIDE.md)
-
-### 日常使用（一行命令）
-
-```bash
-# 进入项目目录
-cd arknights-story-reader
-
-# 更新版本（自动同步所有配置）
-npm version patch  # 或 minor / major
-```
-
-就这么简单！✨
+1. ✅ `src-tauri/tauri.conf.json` - 当前 versionCode：**11101**
+2. ✅ `src-tauri/gen/android/app/tauri.properties` - 当前版本：**1.11.1**
+3. ✅ 所有配置文件版本号已同步到 **1.11.1**
