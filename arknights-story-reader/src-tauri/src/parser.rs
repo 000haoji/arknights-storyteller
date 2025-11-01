@@ -435,6 +435,10 @@ impl IfEmpty for String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    // 引入边界情况测试
+    #[path = "parser_edge_cases.rs"]
+    mod edge_cases;
 
     #[test]
     fn test_parse_dialogue() {

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from "@/lib/logger";
 
 function isTauriEnvironment(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -25,6 +26,7 @@ export type AndroidUpdateManifest = {
   fileName?: string | null;
   notes?: string | null;
   githubReleaseUrl?: string | null;
+  sha256?: string | null; // 可选：APK 的 SHA-256 校验和（hex）
 };
 
 export interface DesktopUpdateAvailable {
@@ -133,7 +135,7 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
     if (!suppressErrors) {
       throw new UpdateError("MISSING_FEED", "未配置安卓更新源 VITE_ANDROID_UPDATE_FEED");
     }
-    console.info("[Updater] 未配置 VITE_ANDROID_UPDATE_FEED，跳过安卓更新检查");
+    logger.info("Updater", "未配置 VITE_ANDROID_UPDATE_FEED，跳过安卓更新检查");
     return null;
   }
 
@@ -169,7 +171,7 @@ async function fetchAndroidManifest(options: ManifestOptions = {}): Promise<Andr
       }
       throw new UpdateError("UNKNOWN", error instanceof Error ? error.message : String(error));
     }
-    console.error("[Updater] 获取安卓更新信息失败", error);
+    logger.error("Updater", "获取安卓更新信息失败", error);
     return null;
   }
 }
@@ -184,7 +186,7 @@ async function safeConfirm(message: string): Promise<boolean> {
       return await dialog.ask(message, { title: "发现更新" });
     }
   } catch (error) {
-    console.info("[Updater] 对话框插件不可用，回退到 window.confirm", error);
+    logger.info("Updater", "对话框插件不可用，回退到 window.confirm", error);
   }
   return window.confirm(message);
 }
@@ -264,6 +266,7 @@ export async function installAndroidUpdate(update: AndroidUpdateAvailable): Prom
       fn: () => invoke<AndroidInstallResponse>("android_update_method2_http_download", {
         url: update.manifest.url,
         fileName: update.manifest.fileName ?? null,
+        expected_sha256: update.manifest.sha256 ?? null,
       }),
     },
     {
@@ -300,13 +303,13 @@ export async function installAndroidUpdate(update: AndroidUpdateAvailable): Prom
 
   for (const method of methods) {
     try {
-      console.info(`[AndroidUpdate] Attempting ${method.name}`);
+      logger.info("AndroidUpdate", `Attempting ${method.name}`);
       const response = await method.fn();
-      console.info(`[AndroidUpdate] ${method.name} succeeded`, response);
+      logger.info("AndroidUpdate", `${method.name} succeeded`, response);
       return response;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      console.warn(`[AndroidUpdate] ${method.name} failed:`, errMsg);
+      logger.warn("AndroidUpdate", `${method.name} failed:`, errMsg);
       errors.push({ method: method.name, error: errMsg });
     }
   }
@@ -319,11 +322,11 @@ export async function openAndroidInstallPermissionSettings(): Promise<void> {
   try {
     await invoke("android_open_install_permission_settings");
   } catch (err1) {
-    console.warn("[AndroidUpdate] Primary settings opener failed, trying plugin direct", err1);
+    logger.warn("AndroidUpdate", "Primary settings opener failed, trying plugin direct", err1);
     try {
       await invoke("plugin:apk-updater|open-install-permission-settings");
     } catch (err2) {
-      console.error("[AndroidUpdate] All settings opener methods failed", err1, err2);
+      logger.error("AndroidUpdate", "All settings opener methods failed", err1, err2);
       throw err2;
     }
   }
@@ -340,15 +343,15 @@ export async function saveApkToDownloads(
   fileName: string
 ): Promise<SaveToDownloadsResponse> {
   try {
-    console.info("[AndroidUpdate] Saving APK to downloads folder:", { sourceFilePath, fileName });
+    logger.info("AndroidUpdate", "Saving APK to downloads folder:", { sourceFilePath, fileName });
     const response = await invoke<SaveToDownloadsResponse>("android_save_apk_to_downloads", {
       sourceFilePath,
       fileName,
     });
-    console.info("[AndroidUpdate] APK saved successfully:", response);
+    logger.info("AndroidUpdate", "APK saved successfully:", response);
     return response;
   } catch (error) {
-    console.error("[AndroidUpdate] Failed to save APK to downloads:", error);
+    logger.error("AndroidUpdate", "Failed to save APK to downloads:", error);
     throw error;
   }
 }
@@ -358,7 +361,7 @@ export async function openExternalUrl(url: string): Promise<void> {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
   } catch (error) {
-    console.error("[Updater] Failed to open URL via plugin, falling back to window.open", error);
+    logger.warn("Updater", "Failed to open URL via plugin, falling back to window.open", error);
     window.open(url, "_blank");
   }
 }
@@ -382,7 +385,7 @@ export function useAppUpdater() {
         }
       } catch (error) {
         if (!cancelled) {
-          console.error("[Updater] 自动更新流程失败", error);
+          logger.error("Updater", "自动更新流程失败", error);
         }
       }
     };
@@ -396,21 +399,21 @@ export function useAppUpdater() {
           `检测到新版本 ${updateInfo.availableVersion}，是否立即下载并安装更新？`
         );
         if (!shouldInstall || isCancelled) {
-          console.info("[Updater] 用户取消更新");
+          logger.info("Updater", "用户取消更新");
           return;
         }
 
-        console.info("[Updater] 开始下载更新", updateInfo);
+        logger.info("Updater", "开始下载更新", updateInfo);
         await installDesktopUpdate(updateInfo, (event) => {
           if (isCancelled) return;
-          console.info("[Updater] 下载事件", event);
+          logger.info("Updater", "下载事件", event);
         });
       } catch (error) {
         if (!isCancelled) {
           if (error instanceof Error && /plugin/i.test(error.message)) {
-            console.info("[Updater] 桌面更新插件不可用：", error.message);
+            logger.info("Updater", "桌面更新插件不可用：", error.message);
           } else {
-            console.error("[Updater] 桌面更新失败", error);
+            logger.error("Updater", "桌面更新失败", error);
           }
         }
       }
@@ -425,7 +428,7 @@ export function useAppUpdater() {
         if (isCancelled) return;
 
         if (compareVersions(manifest.version, currentVersion) <= CompareResult.Equals) {
-          console.info("[Updater] 安卓端已是最新版本", { currentVersion, remote: manifest.version });
+          logger.info("Updater", "安卓端已是最新版本", { currentVersion, remote: manifest.version });
           return;
         }
 
@@ -434,7 +437,7 @@ export function useAppUpdater() {
         );
 
         if (!shouldInstall || isCancelled) {
-          console.info("[Updater] 用户取消安卓更新");
+          logger.info("Updater", "用户取消安卓更新");
           return;
         }
 
@@ -447,14 +450,14 @@ export function useAppUpdater() {
         if (isCancelled) return;
 
         if (response?.needsPermission) {
-          console.warn("[Updater] 需要开启未知来源安装权限");
+          logger.warn("Updater", "需要开启未知来源安装权限");
           await openAndroidInstallPermissionSettings();
         } else {
-          console.info("[Updater] 已触发 APK 安装流程", response);
+          logger.info("Updater", "已触发 APK 安装流程", response);
         }
       } catch (error) {
         if (!isCancelled) {
-          console.error("[Updater] 下载或安装安卓更新失败", error);
+          logger.error("Updater", "下载或安装安卓更新失败", error);
         }
       }
     };

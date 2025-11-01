@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type SyncProgress } from "@/services/api";
+import { logger } from "@/lib/logger";
 
 interface UseDataSyncManagerOptions {
   active: boolean;
@@ -28,7 +29,7 @@ export function useDataSyncManager({ active, onSuccess }: UseDataSyncManagerOpti
       setRemoteVersion(remote);
       setHasUpdate(needUpdate);
     } catch (err) {
-      console.error("[useDataSyncManager] 加载版本信息失败:", err);
+      logger.error("useDataSyncManager", 加载版本信息失败:", err);
       setError((err instanceof Error ? err.message : "加载版本信息失败") ?? "加载版本信息失败");
     } finally {
       setLoadingInfo(false);
@@ -59,10 +60,26 @@ export function useDataSyncManager({ active, onSuccess }: UseDataSyncManagerOpti
       setProgress({ phase: "准备", current: 0, total: 1, message: "准备开始..." });
       await api.syncData();
       onSuccess?.();
+      // 同步完成后自动建立全文索引，减少用户手动点击
+      try {
+        setProgress({ phase: "索引", current: 0, total: 1, message: "正在建立全文索引…" });
+        await api.buildStoryIndex();
+        setProgress({ phase: "索引", current: 1, total: 1, message: "索引完成" });
+        // 通知搜索面板刷新索引状态（兼容已有监听）
+        try { window.dispatchEvent(new CustomEvent("app:rebuild-story-index")); } catch {}
+      } catch (e) {
+        logger.warn("useDataSyncManager", "自动建立索引失败", e);
+      }
+      
+      // 清空搜索缓存，防止返回陈旧结果
+      try {
+        localStorage.removeItem("arknights-story-search-cache-v1");
+      } catch {}
+      
       await loadVersionInfo();
     } catch (err) {
       const message = err instanceof Error ? err.message : "同步失败";
-      console.error("[useDataSyncManager] 同步失败:", message, err);
+      logger.error("useDataSyncManager", "同步失败:", message, err);
       setError(message);
     } finally {
       setSyncing(false);
@@ -102,10 +119,25 @@ export function useDataSyncManager({ active, onSuccess }: UseDataSyncManagerOpti
         });
 
         onSuccess?.();
+        // 导入完成后自动建立全文索引
+        try {
+          setProgress({ phase: "索引", current: 0, total: 1, message: "正在建立全文索引…" });
+          await api.buildStoryIndex();
+          setProgress({ phase: "索引", current: 1, total: 1, message: "索引完成" });
+          try { window.dispatchEvent(new CustomEvent("app:rebuild-story-index")); } catch {}
+        } catch (e) {
+          logger.warn("useDataSyncManager", 导入后自动建立索引失败", e);
+        }
+        
+        // 清空搜索缓存
+        try {
+          localStorage.removeItem("arknights-story-search-cache-v1");
+        } catch {}
+        
         await loadVersionInfo();
       } catch (err) {
         const message = err instanceof Error ? err.message : "导入失败";
-        console.error("[useDataSyncManager] 导入失败:", message, err);
+        logger.error("useDataSyncManager", 导入失败:", message, err);
         setError(message);
       } finally {
         setImporting(false);

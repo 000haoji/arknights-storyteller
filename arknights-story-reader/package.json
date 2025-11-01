@@ -10,7 +10,16 @@
     "tauri": "tauri",
     "dev:tauri": "bash scripts/dev-tauri.sh",
     "sync-version": "node scripts/sync-version.js",
-    "version": "npm run sync-version && git add -A"
+    "version": "npm run sync-version && git add -A",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts,.tsx --max-warnings 0",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
@@ -29,13 +38,23 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.14",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
     "@vitejs/plugin-react": "^4.6.0",
     "autoprefixer": "^10.4.21",
+    "eslint": "^8.0.0",
+    "eslint-plugin-react": "^7.33.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "jsdom": "^23.0.0",
     "postcss": "^8.5.6",
+    "prettier": "^3.1.0",
     "tailwindcss": "^4.1.14",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^1.0.4"
   }
 }

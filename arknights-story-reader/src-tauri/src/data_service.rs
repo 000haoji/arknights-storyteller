@@ -8,6 +8,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use reqwest::blocking::Client;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
+use sha2::{Sha256, Digest};
 use tauri::{AppHandle, Emitter};
 use unicode_normalization::UnicodeNormalization;
 use zip::ZipArchive;
@@ -118,6 +119,21 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn compute_file_sha256(path: &Path) -> Result<String, String> {
+    let mut file = fs::File::open(path).map_err(|e| format!("打开文件失败: {}", e))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buffer).map_err(|e| format!("读取文件失败: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    let result = hasher.finalize();
+    Ok(format!("{:x}", result))
 }
 
 fn is_common_punctuation(ch: char) -> bool {
@@ -866,8 +882,11 @@ impl DataService {
     }
 
     fn create_http_client() -> Result<Client, String> {
+        use std::time::Duration;
         Client::builder()
             .user_agent("arknights-story-reader")
+            .connect_timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(300))
             .build()
             .map_err(|e| format!("Failed to create http client: {}", e))
     }
@@ -958,10 +977,23 @@ impl DataService {
         zip_file
             .flush()
             .map_err(|e| format!("Failed to flush zip file: {}", e))?;
+        drop(zip_file);
+
+        // 验证下载完整性：若声明了 Content-Length，校验实际下载大小
+        if total_bytes > 0 && downloaded != total_bytes {
+            let _ = fs::remove_file(&zip_path);
+            return Err(format!(
+                "下载不完整：期望 {} 字节，实际 {} 字节",
+                total_bytes, downloaded
+            ));
+        }
 
         emit_progress(app, "下载", 100, 100, "下载完成");
-        self.extract_zip_at(&zip_path, parent_dir, app)?;
+        
+        // 解压并清理临时文件（即使失败也要尝试清理）
+        let extract_result = self.extract_zip_at(&zip_path, parent_dir, app);
         fs::remove_file(&zip_path).ok();
+        extract_result?;
 
         Ok(())
     }
@@ -974,6 +1006,8 @@ impl DataService {
     ) -> Result<(), String> {
         emit_progress(app, "解压", 0, 100, "正在解压数据");
         let extract_root = parent_dir.join("ArknightsGameData_extract");
+        
+        // 清理旧的解压目录（如果存在）
         if extract_root.exists() {
             fs::remove_dir_all(&extract_root)
                 .map_err(|e| format!("Failed to clean extract dir: {}", e))?;

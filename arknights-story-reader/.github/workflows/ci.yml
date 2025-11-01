@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master, dev]
+
+jobs:
+  frontend-check:
+    name: 前端代码检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: 安装依赖
+        run: npm ci
+      
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit
+      
+      - name: 构建前端
+        run: npm run build
+      
+      - name: 检查构建产物大小
+        run: |
+          echo "📦 构建产物大小："
+          du -sh dist/
+          du -sh dist/assets/*.js | head -10
+
+  backend-check:
+    name: Rust 后端检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 设置 Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      
+      - name: Rust 缓存
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      
+      - name: 安装系统依赖（Linux）
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      
+      - name: Cargo fmt 检查
+        working-directory: src-tauri
+        run: cargo fmt --all -- --check
+      
+      - name: Clippy 检查
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      
+      - name: Rust 单元测试
+        working-directory: src-tauri
+        run: cargo test --lib
+      
+      - name: 构建检查
+        working-directory: src-tauri
+        run: cargo build --release
+
+  security-audit:
+    name: 安全审计
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: npm 安全审计
+        run: npm audit --audit-level=high
+        continue-on-error: true
+      
+      - name: 设置 Rust
+        uses: dtolnay/rust-toolchain@stable
+      
+      - name: 安装 cargo-audit
+        run: cargo install cargo-audit
+      
+      - name: Cargo 安全审计
+        working-directory: src-tauri
+        run: cargo audit
+        continue-on-error: true
+

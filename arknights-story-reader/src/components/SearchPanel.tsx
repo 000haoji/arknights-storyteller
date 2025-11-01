@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, X } from "lucide-react";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
+import { logger } from "@/lib/logger";
 
 interface SearchPanelProps {
   onSelectResult: (story: StoryEntry, focus: { query: string; snippet?: string | null }) => void;
@@ -29,6 +30,8 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
   const [history, setHistory] = useState<string[]>([]);
   const [cache, setCache] = useState<Record<string, { results: SearchResult[]; updatedAt: number }>>({});
   const [fromCache, setFromCache] = useState<{ used: boolean; updatedAt?: number }>({ used: false });
+  const MAX_CACHE_ENTRIES = 20;
+  const CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4小时过期（游戏内容更新频繁）
 
   const saveHistory = useCallback((q: string) => {
     const key = "arknights-story-search-history";
@@ -57,7 +60,9 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
       const key = trimmed;
       if (!opts?.forceRefresh && !debugMode) {
         const cached = cache[key];
-        if (cached) {
+        const now = Date.now();
+        // 检查缓存是否存在且未过期（24小时内有效）
+        if (cached && (now - cached.updatedAt) < CACHE_TTL_MS) {
           setResults(cached.results);
           setSearched(true);
           setFromCache({ used: true, updatedAt: cached.updatedAt });
@@ -80,7 +85,11 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
         setDebugExpanded(false);
         // 更新缓存
         const updatedAt = Date.now();
-        const nextCache = { ...cache, [key]: { results: data, updatedAt } };
+        // 合并并按时间裁剪为 LRU（最多 20 条）
+        const merged = { ...cache, [key]: { results: data, updatedAt } } as Record<string, { results: SearchResult[]; updatedAt: number }>;
+        const entries = Object.entries(merged).sort((a, b) => (b[1].updatedAt - a[1].updatedAt));
+        const trimmed = entries.slice(0, MAX_CACHE_ENTRIES);
+        const nextCache = Object.fromEntries(trimmed);
         setCache(nextCache);
         try {
           localStorage.setItem("arknights-story-search-cache-v1", JSON.stringify(nextCache));
@@ -90,7 +99,7 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
       setSearched(true);
       saveHistory(query.trim());
     } catch (err) {
-      console.error("Search failed:", err);
+      logger.error("SearchPanel", "Search failed:", err);
     } finally {
       setSearching(false);
       setTimeout(() => setProgress(null), 400);
@@ -113,7 +122,7 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
         onSelectResult(story, { query, snippet: result.matchedText });
       }
     } catch (err) {
-      console.error("Open result failed:", err);
+      logger.error("SearchPanel", "Open result failed:", err);
     } finally {
       setOpeningStoryId(null);
     }
@@ -140,7 +149,7 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
       setIndexStatus(status);
       setIndexError(null);
     } catch (err) {
-      console.error("Failed to fetch index status:", err);
+      logger.error("SearchPanel", "Failed to fetch index status:", err);
       setIndexError("获取索引状态失败");
     }
   }, []);
@@ -155,7 +164,7 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
       await refreshIndexStatus();
       setIndexMessage("全文索引建立完成");
     } catch (err) {
-      console.error("Build index failed:", err);
+      logger.error("SearchPanel", "Build index failed:", err);
       const message =
         err instanceof Error ? err.message : typeof err === "string" ? err : "";
       if (message.includes("NOT_INSTALLED")) {
@@ -172,12 +181,25 @@ export function SearchPanel({ onSelectResult, onSelectFurniture }: SearchPanelPr
 
   useEffect(() => {
     void refreshIndexStatus();
-    // 初始化历史记录
+    // 初始化历史记录与缓存（清理过期条目）
     try {
       const raw = localStorage.getItem("arknights-story-search-history");
       setHistory(raw ? JSON.parse(raw) : []);
       const cacheRaw = localStorage.getItem("arknights-story-search-cache-v1");
-      setCache(cacheRaw ? JSON.parse(cacheRaw) : {});
+      if (cacheRaw) {
+        const parsed = JSON.parse(cacheRaw) as Record<string, { results: SearchResult[]; updatedAt: number }>;
+        const now = Date.now();
+        // 过滤掉已过期的缓存条目
+        const validEntries = Object.entries(parsed).filter(
+          ([, entry]) => (now - entry.updatedAt) < CACHE_TTL_MS
+        );
+        const cleanedCache = Object.fromEntries(validEntries);
+        setCache(cleanedCache);
+        // 若有过期条目被清理，更新 localStorage
+        if (validEntries.length !== Object.keys(parsed).length) {
+          localStorage.setItem("arknights-story-search-cache-v1", JSON.stringify(cleanedCache));
+        }
+      }
     } catch {}
     return () => {
       if (progressUnlistenRef.current) {

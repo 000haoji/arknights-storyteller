@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { StoryList } from "@/components/StoryList";
 import { StoryReader } from "@/components/StoryReader";
-import { SearchPanel } from "@/components/SearchPanel";
-import { Settings } from "@/components/Settings";
 import { BottomNav } from "@/components/BottomNav";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { StoryEntry } from "@/types/story";
 import { FavoritesProvider } from "@/hooks/useFavorites";
 import { FavoriteCharactersProvider } from "@/hooks/useFavoriteCharacters";
 import { ClueSetsProvider } from "@/hooks/useClueSets";
 import { AppPreferencesProvider } from "@/hooks/useAppPreferences";
-import { ClueSetsPanel } from "@/components/ClueSetsPanel";
-import { ClueSetReader } from "@/components/ClueSetReader";
+import { logger } from "@/lib/logger";
+const SearchPanel = lazy(() => import("@/components/SearchPanel").then(m => ({ default: m.SearchPanel })));
+const Settings = lazy(() => import("@/components/Settings").then(m => ({ default: m.Settings })));
+const ClueSetsPanel = lazy(() => import("@/components/ClueSetsPanel").then(m => ({ default: m.ClueSetsPanel })));
+const ClueSetReader = lazy(() => import("@/components/ClueSetReader").then(m => ({ default: m.ClueSetReader })));
 import { KeepAlive } from "@/components/KeepAlive";
-import { CharactersPanel } from "@/components/CharactersPanel";
-import { FurniturePanel } from "@/components/FurniturePanel";
+const CharactersPanel = lazy(() => import("@/components/CharactersPanel").then(m => ({ default: m.CharactersPanel })));
+const FurniturePanel = lazy(() => import("@/components/FurniturePanel").then(m => ({ default: m.FurniturePanel })));
 import { useAppUpdater } from "@/hooks/useAppUpdater";
 
 type Tab = "stories" | "characters" | "search" | "clues" | "settings" | "furniture";
@@ -93,7 +95,7 @@ function App() {
   }, [readerActive, clueReaderSetId, setClueReaderSetId, setReaderVisible]);
 
   const handleSelectStory = useCallback((story: StoryEntry) => {
-    console.log("[App] 选择剧情:", story.storyName);
+    logger.debug("App", "选择剧情:", story.storyName);
     setReaderStory(story);
     setReaderFocus(null);
     setReaderInitialCharacter(null);
@@ -102,7 +104,7 @@ function App() {
   }, []);
 
   const handleBackToList = useCallback(() => {
-    console.log("[App] 返回剧情列表");
+    logger.debug("App", "返回剧情列表");
     if (typeof window !== "undefined" && readerActive) {
       window.history.back();
       return;
@@ -112,7 +114,7 @@ function App() {
 
   const handleSearchResult = useCallback(
     (story: StoryEntry, focus: { query: string; snippet?: string | null }) => {
-      console.log("[App] 搜索结果选择，storyId:", story.storyId);
+      logger.debug("App", "搜索结果选择，storyId:", story.storyId);
       setReaderStory(story);
       setReaderFocus({
         storyId: story.storyId,
@@ -128,7 +130,7 @@ function App() {
   );
 
   const handleSelectFurniture = useCallback((furnitureId: string) => {
-    console.log("[App] 选择家具:", furnitureId);
+    logger.debug("App", "选择家具:", furnitureId);
     // 切换到家具面板
     setActiveTab("furniture");
     // TODO: 可以在这里添加家具详情显示逻辑
@@ -136,7 +138,7 @@ function App() {
 
   const handleOpenStoryWithCharacter = useCallback(
     (story: StoryEntry, character: string) => {
-      console.log("[App] 从人物面板打开剧情:", story.storyName, "角色:", character);
+      logger.debug("App", "从人物面板打开剧情:", story.storyName, "角色:", character);
       setReaderStory(story);
       setReaderFocus(null);
       setReaderInitialCharacter(character);
@@ -181,15 +183,39 @@ function App() {
     [handleSelectStory]
   );
   const searchView = useMemo(
-    () => <SearchPanel onSelectResult={handleSearchResult} onSelectFurniture={handleSelectFurniture} />,
+    () => (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载搜索面板…</div>}>
+          <SearchPanel onSelectResult={handleSearchResult} onSelectFurniture={handleSelectFurniture} />
+        </Suspense>
+      </ErrorBoundary>
+    ),
     [handleSearchResult, handleSelectFurniture]
   );
-  const settingsView = useMemo(() => <Settings />, []);
+  const settingsView = useMemo(() => (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载设置…</div>}>
+        <Settings />
+      </Suspense>
+    </ErrorBoundary>
+  ), []);
   const cluesView = useMemo(
-    () => <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} onReadSet={handleReadClueSet} />,
+    () => (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载线索…</div>}>
+          <ClueSetsPanel onOpenStoryJump={handleOpenStoryJump} onReadSet={handleReadClueSet} />
+        </Suspense>
+      </ErrorBoundary>
+    ),
     [handleOpenStoryJump, handleReadClueSet]
   );
-  const furnitureView = useMemo(() => <FurniturePanel />, []);
+  const furnitureView = useMemo(() => (
+    <ErrorBoundary>
+      <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载家具…</div>}>
+        <FurniturePanel />
+      </Suspense>
+    </ErrorBoundary>
+  ), []);
 
   const readerView = readerStory ? (
     <StoryReader
@@ -208,8 +234,9 @@ function App() {
     />
   ) : null;
 
-  console.log(
-    "[App] 当前状态 - activeTab:",
+  logger.debug(
+    "App",
+    "当前状态 - activeTab:",
     activeTab,
     "readerVisible:",
     readerVisible,
@@ -231,7 +258,11 @@ function App() {
             active={!readerActive && activeTab === "characters"}
             className="absolute inset-0"
           >
-            <CharactersPanel onOpenStory={handleOpenStoryWithCharacter} />
+            <ErrorBoundary>
+              <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载人物…</div>}>
+                <CharactersPanel onOpenStory={handleOpenStoryWithCharacter} />
+              </Suspense>
+            </ErrorBoundary>
           </KeepAlive>
           <KeepAlive active={!readerActive && activeTab === "search"} className="absolute inset-0">
             {searchView}
@@ -256,15 +287,19 @@ function App() {
         )}
         {clueReaderSetId && (
           <KeepAlive active={Boolean(clueReaderSetId)} className="absolute inset-0">
-            <ClueSetReader
-              key={clueReaderSetId}
-              setId={clueReaderSetId}
-              onClose={() => setClueReaderSetId(null)}
-              onOpenStoryJump={(story, jump) => {
-                setClueReaderSetId(null);
-                handleOpenStoryJump(story, jump);
-              }}
-            />
+            <ErrorBoundary onReset={() => setClueReaderSetId(null)}>
+              <Suspense fallback={<div className="p-4 text-sm text-[hsl(var(--color-muted-foreground))]">加载线索阅读器…</div>}>
+                <ClueSetReader
+                  key={clueReaderSetId}
+                  setId={clueReaderSetId}
+                  onClose={() => setClueReaderSetId(null)}
+                  onOpenStoryJump={(story, jump) => {
+                    setClueReaderSetId(null);
+                    handleOpenStoryJump(story, jump);
+                  }}
+                />
+              </Suspense>
+            </ErrorBoundary>
           </KeepAlive>
         )}
       </div>

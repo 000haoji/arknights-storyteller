@@ -12,6 +12,28 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 
+#[cfg(target_os = "android")]
+use sha2::{Sha256, Digest};
+#[cfg(target_os = "android")]
+use std::io::Read as _;
+
+#[cfg(target_os = "android")]
+fn compute_file_sha256(path: &std::path::Path) -> Result<String, String> {
+    use std::fs::File;
+    let mut file = File::open(path).map_err(|e| format!("打开文件失败: {}", e))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buffer).map_err(|e| format!("读取文件失败: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    let result = hasher.finalize();
+    Ok(format!("{:x}", result))
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AndroidInstallResponse {
@@ -462,44 +484,67 @@ pub async fn android_update_method2_http_download(
     app: AppHandle,
     url: String,
     file_name: Option<String>,
+    expected_sha256: Option<String>,
 ) -> Result<AndroidInstallResponse, String> {
-    use std::fs::File;
-    use std::io::Write;
-    use tauri::Manager;
+    // Wrap blocking HTTP + filesystem in a blocking task to avoid stalling async runtime/UI
+    tauri::async_runtime::spawn_blocking(move || {
+        use std::fs::File;
+        use std::io::Write;
+        use tauri::Manager;
 
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(300))
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
-    let response = client
-        .get(&url)
-        .send()
-        .map_err(|e| format!("下载请求失败: {}", e))?;
+        let response = client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("下载请求失败: {}", e))?;
 
-    if !response.status().is_success() {
-        return Err(format!("服务器返回错误: HTTP {}", response.status()));
-    }
+        if !response.status().is_success() {
+            return Err(format!("服务器返回错误: HTTP {}", response.status()));
+        }
 
-    let bytes = response
-        .bytes()
-        .map_err(|e| format!("读取响应失败: {}", e))?;
+        let bytes = response
+            .bytes()
+            .map_err(|e| format!("读取响应失败: {}", e))?;
 
-    let cache_dir = app
-        .path()
-        .app_cache_dir()
-        .map_err(|e| format!("获取缓存目录失败: {}", e))?;
-    std::fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
+        let cache_dir = app
+            .path()
+            .app_cache_dir()
+            .map_err(|e| format!("获取缓存目录失败: {}", e))?;
+        std::fs::create_dir_all(&cache_dir).map_err(|e| format!("创建缓存目录失败: {}", e))?;
 
-    let file_name =
-        file_name.unwrap_or_else(|| format!("update-{}.apk", chrono::Utc::now().timestamp()));
-    let apk_path = cache_dir.join(&file_name);
+        let file_name =
+            file_name.unwrap_or_else(|| format!("update-{}.apk", chrono::Utc::now().timestamp()));
+        let apk_path = cache_dir.join(&file_name);
 
-    let mut file = File::create(&apk_path).map_err(|e| format!("创建 APK 文件失败: {}", e))?;
-    file.write_all(&bytes)
-        .map_err(|e| format!("写入 APK 文件失败: {}", e))?;
+        let mut file = File::create(&apk_path).map_err(|e| format!("创建 APK 文件失败: {}", e))?;
+        file.write_all(&bytes)
+            .map_err(|e| format!("写入 APK 文件失败: {}", e))?;
+        drop(file);
 
-    install_apk_via_intent(app, apk_path)
+        // 如果提供了 SHA-256 校验和，则验证文件完整性
+        if let Some(expected) = expected_sha256.as_ref() {
+            let expected_lower = expected.trim().to_lowercase();
+            if !expected_lower.is_empty() {
+                let actual = compute_file_sha256(&apk_path)?;
+                if actual != expected_lower {
+                    // 校验失败，删除文件并返回用户友好的错误
+                    let _ = std::fs::remove_file(&apk_path);
+                    return Err(format!(
+                        "下载的安装包可能已损坏或被篡改，请重新下载。\n\n技术详情：SHA-256 校验失败\n期望: {}\n实际: {}",
+                        expected_lower, actual
+                    ));
+                }
+            }
+        }
+
+        install_apk_via_intent(app, apk_path)
+    })
+    .await
+    .map_err(|err| format!("Failed to join android http download task: {}", err))?
 }
 
 #[cfg(target_os = "android")]
@@ -582,6 +627,7 @@ pub async fn android_update_method2_http_download(
     _app: AppHandle,
     _url: String,
     _file_name: Option<String>,
+    _expected_sha256: Option<String>,
 ) -> Result<AndroidInstallResponse, String> {
     Err("Not Android platform".into())
 }

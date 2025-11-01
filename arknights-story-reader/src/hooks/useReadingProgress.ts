@@ -36,28 +36,46 @@ function writeProgressMap(map: ProgressMap) {
   }
 }
 
-export function useReadingProgress(storyPath: string | null) {
+/**
+ * Persist reading progress per story (keyed by storyId primarily to avoid collisions),
+ * with backward compatibility for legacy keys that used storyPath as the key.
+ */
+export function useReadingProgress(storyId: string | null, storyPath: string | null) {
+  // New primary key (v2): id:<storyId> when available; otherwise path:<storyPath>
+  const newKey = useMemo(() => {
+    if (storyId && storyId.trim().length > 0) return `id:${storyId}`;
+    if (storyPath && storyPath.trim().length > 0) return `path:${storyPath}`;
+    return null;
+  }, [storyId, storyPath]);
+
+  // Legacy key (v1): raw storyPath
+  const legacyKey = useMemo(() => {
+    if (storyPath && storyPath.trim().length > 0) return storyPath;
+    return null;
+  }, [storyPath]);
+
   const [progress, setProgress] = useState<ReadingProgress | null>(() => {
-    if (!storyPath) return null;
+    if (!newKey && !legacyKey) return null;
     const map = readProgressMap();
-    return map[storyPath] ?? null;
+    return (newKey ? map[newKey] : null) ?? (legacyKey ? map[legacyKey] : null) ?? null;
   });
 
   useEffect(() => {
-    if (!storyPath) {
+    if (!newKey && !legacyKey) {
       setProgress(null);
       return;
     }
     const map = readProgressMap();
-    setProgress(map[storyPath] ?? null);
-  }, [storyPath]);
+    setProgress((newKey ? map[newKey] : null) ?? (legacyKey ? map[legacyKey] : null) ?? null);
+  }, [newKey, legacyKey]);
 
   const updateProgress = useCallback(
     (partial: Partial<ReadingProgress>) => {
-      if (!storyPath) return;
+      if (!newKey && !legacyKey) return;
+      const effectivePath = storyPath ?? progress?.storyPath ?? "";
       setProgress((prev) => {
         const merged: ReadingProgress = {
-          storyPath,
+          storyPath: effectivePath,
           percentage: partial.percentage ?? prev?.percentage ?? 0,
           currentPage: partial.currentPage ?? prev?.currentPage,
           scrollTop: partial.scrollTop ?? prev?.scrollTop,
@@ -66,21 +84,30 @@ export function useReadingProgress(storyPath: string | null) {
         };
 
         const map = readProgressMap();
-        map[storyPath] = merged;
+        // Write to new primary key
+        if (newKey) {
+          map[newKey] = merged;
+        }
+        // Clean up legacy entry if it exists and differs from the new key
+        if (legacyKey && (!newKey || legacyKey !== newKey)) {
+          // Keep legacy for backward compat, or migrate by overwriting as well
+          map[legacyKey] = merged;
+        }
         writeProgressMap(map);
         return merged;
       });
     },
-    [storyPath]
+    [newKey, legacyKey, storyPath, progress?.storyPath]
   );
 
   const clearProgress = useCallback(() => {
-    if (!storyPath) return;
+    if (!newKey && !legacyKey) return;
     setProgress(null);
     const map = readProgressMap();
-    delete map[storyPath];
+    if (newKey) delete map[newKey];
+    if (legacyKey) delete map[legacyKey];
     writeProgressMap(map);
-  }, [storyPath]);
+  }, [newKey, legacyKey]);
 
   return useMemo(
     () => ({

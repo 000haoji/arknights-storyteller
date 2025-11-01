@@ -29,6 +29,10 @@ src-tauri/Cargo.lock
 
 # Data
 ArknightsGameData/
+ArknightsGameData.zip
+ArknightsGameData_extract/
+ArknightsGameData_import.zip
+story_index.db*
 gradle-8.14.3/
 .gradle/
 .gradle-cache/
@@ -36,3 +40,10 @@ gradle-8.14.3/
 # Environment overrides
 .env
 .env.*
+
+# APK 临时文件（Android 更新）
+*.apk
+update-*.apk
+
+# 本地测试数据
+*.test.db

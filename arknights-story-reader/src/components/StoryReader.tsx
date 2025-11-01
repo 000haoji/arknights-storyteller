@@ -28,6 +28,7 @@ import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useHighlights } from "@/hooks/useHighlights";
 import { useClueSets } from "@/hooks/useClueSets";
+import { useVirtualScroll } from "@/hooks/useVirtualScroll";
 import { cn } from "@/lib/utils";
 import { CustomScrollArea } from "@/components/ui/custom-scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { useAppPreferences } from "@/hooks/useAppPreferences";
 import type { StoryEntry } from "@/types/story";
 import { fnv1a64, normalizeForDigest, digestToHex64 } from "@/lib/clueCodecs";
+import { logger } from "@/lib/logger";
 
 interface ReaderSearchFocus {
   storyId: string;
@@ -99,7 +101,8 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
 
   const { settings, updateSettings, resetSettings } = useReaderSettings();
   const { showSummaries } = useAppPreferences();
-  const { progress, updateProgress } = useReadingProgress(storyPath);
+  // Use storyId as primary key to avoid collisions when different stories share the same storyPath
+  const { progress, updateProgress } = useReadingProgress(storyId, storyPath);
   const { highlights, toggleHighlight, isHighlighted, clearHighlights } = useHighlights(storyPath);
   const { isFavorite, toggleFavorite } = useFavorites();
   const { sets: clueSets, addItem, createSet, removeItem, ensureDefaultSetId } = useClueSets();
@@ -156,10 +159,64 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
     return merged;
   }, [content]);
 
+  // 虚拟滚动：滚动模式下仅渲染可视窗口内的段落，大幅降低长文 DOM 开销
+  // 按段落类型动态估算高度，提升定位精度
+  const getEstimatedSegmentSize = useCallback((index: number): number => {
+    const segment = processedSegments[index];
+    if (!segment) return 100;
+    
+    switch (segment.type) {
+      case "dialogue":
+        return 110; // 对话通常包含角色名 + 文本
+      case "narration":
+        return 85;  // 旁白较紧凑
+      case "decision":
+        return 180; // 选择段落包含多个选项
+      case "system":
+        return 95;  // 系统消息
+      case "subtitle":
+      case "sticker":
+        return 70;  // 字幕/贴纸较短
+      case "header":
+        return 60;  // 标题最短
+      default:
+        return 100;
+    }
+  }, [processedSegments]);
+
+  // Feature Flag: 虚拟滚动可以通过环境变量禁用（用于紧急回退）
+  const ENABLE_VIRTUAL_SCROLL = import.meta.env.VITE_ENABLE_VIRTUAL_SCROLL !== 'false';
+  
+  const virtualScroll = useVirtualScroll(scrollContainerRef, {
+    itemCount: processedSegments.length,
+    estimatedItemSize: getEstimatedSegmentSize,
+    overscan: 5, // 上下各缓冲 5 条
+    enabled: settings.readingMode === "scroll" && ENABLE_VIRTUAL_SCROLL,
+  });
+
   // Ensure default clue set exists early to guarantee subsequent add operations
   useEffect(() => {
     try { ensureDefaultSetId(); } catch {}
   }, [ensureDefaultSetId]);
+
+  // 虚拟滚动降级监控：检测虚拟化是否正常工作
+  useEffect(() => {
+    if (settings.readingMode !== "scroll") return;
+    if (processedSegments.length < 100) return; // 短文不需要虚拟化
+    
+    const isVirtualized = virtualScroll.virtualItems.length > 0 && 
+                          virtualScroll.virtualItems.length < processedSegments.length * 0.5;
+    
+    if (!isVirtualized && processedSegments.length > 100) {
+      logger.warn(
+        "StoryReader",
+        "虚拟滚动未正常启用，已降级到全量渲染。段落数:",
+        processedSegments.length,
+        "虚拟项数:",
+        virtualScroll.virtualItems.length
+      );
+    }
+  }, [settings.readingMode, processedSegments.length, virtualScroll.virtualItems.length]);
 
   const highlightEntries = useMemo(
     () =>
@@ -336,6 +393,17 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
 
   const scrollToSegment = useCallback(
     (segmentIndex: number, behavior: ScrollBehavior = "smooth") => {
+      // 滚动模式下优先使用虚拟滚动的精确定位
+      if (settings.readingMode === "scroll" && virtualScroll.scrollToIndex) {
+        virtualScroll.scrollToIndex(segmentIndex, "start");
+        
+        // 虚拟滚动后需要等待元素渲染才能应用高亮
+        // 使用 pendingScrollIndexRef 让 layoutEffect 监听并补齐高亮逻辑
+        pendingScrollIndexRef.current = segmentIndex;
+        return;
+      }
+
+      // 分页模式或降级路径：DOM 查询定位
       const container = scrollContainerRef.current;
       if (!container) return;
       const element = container.querySelector<HTMLElement>(
@@ -373,7 +441,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         element.scrollIntoView({ behavior, block: "start" });
       } catch {}
     },
-    [settings.readingMode]
+    [settings.readingMode, virtualScroll]
   );
 
   const renderableSegments = useMemo<RenderableSegment[]>(() => {
@@ -386,8 +454,16 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         index: start + offset,
       }));
     }
+    // 滚动模式：使用虚拟滚动仅渲染可视窗口
+    if (virtualScroll.virtualItems.length > 0) {
+      return virtualScroll.virtualItems.map((vItem) => ({
+        segment: processedSegments[vItem.index],
+        index: vItem.index,
+      }));
+    }
+    // 降级：若虚拟滚动未就绪，渲染全部
     return processedSegments.map((segment, index) => ({ segment, index }));
-  }, [processedSegments, currentPage, settings.readingMode]);
+  }, [processedSegments, currentPage, settings.readingMode, virtualScroll.virtualItems]);
 
   const insights = useMemo(() => {
     if (!processedSegments.length) {
@@ -466,7 +542,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         const normalized = raw.replace(/\r\n/g, "\n").trim();
         setStoryInfoText(normalized.length > 0 ? normalized : null);
       } catch (err) {
-        console.warn("[StoryReader] Failed to load story summary:", err);
+        logger.warn("StoryReader", "Failed to load story summary:", err);
         if (!cancelled) {
           setStoryInfoText(null);
         }
@@ -496,21 +572,33 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       return;
     }
 
+    // 统一的比例回退：即使阅读模式改变也尽量用 percentage 恢复大致位置
+    const pct = typeof progress?.percentage === "number" ? Math.max(0, Math.min(1, progress.percentage)) : null;
+
     if (settings.readingMode === "paged") {
-      const storedPage =
-        progress?.readingMode === "paged" && typeof progress.currentPage === "number"
-          ? Math.min(progress.currentPage, Math.max(totalPages - 1, 0))
-          : 0;
+      let storedPage: number;
+      if (progress?.readingMode === "paged" && typeof progress.currentPage === "number") {
+        storedPage = Math.min(progress.currentPage, Math.max(totalPages - 1, 0));
+      } else if (pct !== null) {
+        const approx = Math.round((totalPages - 1) * pct);
+        storedPage = Math.max(0, Math.min(approx, Math.max(totalPages - 1, 0)));
+      } else {
+        storedPage = 0;
+      }
       setCurrentPage(storedPage);
       const ratio = totalPages <= 1 ? 1 : (storedPage + 1) / totalPages;
       setProgressValue(Number.isFinite(ratio) ? ratio : 0);
     } else {
       const container = scrollContainerRef.current;
       if (!container) return;
-      const storedTop =
-        progress?.readingMode === "scroll" && typeof progress.scrollTop === "number"
-          ? progress.scrollTop
-          : 0;
+      let storedTop = 0;
+      if (progress?.readingMode === "scroll" && typeof progress.scrollTop === "number") {
+        storedTop = progress.scrollTop;
+      } else if (pct !== null) {
+        const { scrollHeight, clientHeight } = container;
+        const denom = Math.max(scrollHeight - clientHeight, 0);
+        storedTop = denom > 0 ? Math.round(denom * pct) : 0;
+      }
       container.scrollTo({ top: storedTop });
       const { scrollHeight, clientHeight } = container;
       const denominator = scrollHeight - clientHeight;
@@ -682,6 +770,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
   ]);
 
   // 当页面或段落渲染完成后，执行挂起的滚动请求（最多尝试几次）
+  // 虚拟滚动场景下，这个 effect 负责在元素渲染后应用高亮
   useLayoutEffect(() => {
     if (pendingScrollIndexRef.current === null) return;
     let tries = 0;
@@ -692,7 +781,14 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       if (container) {
         const element = container.querySelector<HTMLElement>(`[data-segment-index="${index}"]`);
         if (element) {
-          // 找到了目标元素，执行滚动
+          // 虚拟滚动模式下：元素已经通过 virtualScroll.scrollToIndex 定位
+          // 这里只需清除 pending 标记，不再重复滚动
+          if (settings.readingMode === "scroll") {
+            pendingScrollIndexRef.current = null;
+            return;
+          }
+          
+          // 分页模式：执行 DOM 滚动
           scrollToSegment(index);
           pendingScrollIndexRef.current = null;
           return;
@@ -701,6 +797,10 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
       if (tries < 30) {
         tries += 1;
         requestAnimationFrame(tick);
+      } else {
+        // 超时仍未找到元素，清除标记防止无限重试
+        logger.warn("StoryReader", "滚动目标元素未找到，索引:", index);
+        pendingScrollIndexRef.current = null;
       }
     };
     requestAnimationFrame(tick);
@@ -812,6 +912,15 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         segmentStyle.paddingRight = "1.25rem";
       }
 
+      // 虚拟滚动测量回调：在元素渲染后测量其实际高度
+      const measureRef = settings.readingMode === "scroll" 
+        ? (element: HTMLDivElement | null) => {
+            if (element) {
+              virtualScroll.measureElement(index, element);
+            }
+          }
+        : undefined;
+
       const highlightButton = showHighlightButton ? (
         <button
           type="button"
@@ -831,6 +940,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
           className={cn(
             "reader-paragraph reader-dialogue reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -854,6 +964,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className={cn(
               "reader-narration reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -872,6 +983,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className={cn(
               "reader-decision motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -898,6 +1010,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className={cn(
               "reader-system reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -925,6 +1038,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className={cn(
               "reader-subtitle reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -949,6 +1063,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className={cn(
               "reader-sticker reader-segment pr-10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500",
@@ -967,6 +1082,7 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
         return (
           <div
             key={index}
+            ref={measureRef}
             data-segment-index={index}
             className="reader-header motion-safe:animate-in motion-safe:fade-in-0 motion-safe:duration-500"
             style={{ marginBottom: spacing }}
@@ -978,7 +1094,18 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
 
       return null;
     },
-    [bookmarkMode, highlightSegmentIndex, isHighlighted, readerSpacing, renderLines, toggleHighlight]
+    [
+      bookmarkMode,
+      highlightSegmentIndex,
+      isHighlighted,
+      readerSpacing,
+      renderLines,
+      toggleHighlight,
+      activeCharacter,
+      handleToggleHighlightUnified,
+      settings.readingMode,
+      virtualScroll.measureElement,
+    ]
   );
 
   if (loading) {
@@ -1116,8 +1243,33 @@ export function StoryReader({ storyId, storyPath, storyName, onBack, initialFocu
                   <div className="reader-summary-body">{renderLines(storyInfoText)}</div>
                 </div>
               )}
-              {renderableSegments.map((segment, idx) =>
-                renderSegment(segment, idx === renderableSegments.length - 1)
+              {settings.readingMode === "scroll" ? (
+                <div style={{ height: `${virtualScroll.totalSize}px`, position: "relative" }}>
+                  {renderableSegments.map((segment, idx) => {
+                    const vItem = virtualScroll.virtualItems.find((v) => v.index === segment.index);
+                    const offsetTop = vItem?.start ?? 0;
+                    return (
+                      <div
+                        key={segment.index}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${offsetTop}px)`,
+                        }}
+                      >
+                        {renderSegment(segment, idx === renderableSegments.length - 1)}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
+                  {renderableSegments.map((segment, idx) =>
+                    renderSegment(segment, idx === renderableSegments.length - 1)
+                  )}
+                </>
               )}
             </div>
           </div>
